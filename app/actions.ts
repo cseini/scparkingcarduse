@@ -233,12 +233,22 @@ export async function getReports() {
 }
 
 export async function deleteReport(id: number) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('parking_app_feedback')
     .delete()
     .eq('id', id)
+    .select() // 삭제된 데이터를 반환하도록 요청하여 실제 삭제 여부 확인
 
-  if (error) return { success: false, error: '삭제 실패' }
+  if (error) {
+    console.error('Delete error from Supabase:', error)
+    return { success: false, error: '삭제 실패: 데이터베이스 오류' }
+  }
+
+  // 삭제된 행(Row)이 없을 경우 (대부분 권한/RLS 문제)
+  if (!data || data.length === 0) {
+    return { success: false, error: '삭제 실패: 데이터베이스(Supabase) 보안 규칙(RLS)에 의해 삭제가 차단되었습니다.' }
+  }
+
   revalidatePath('/admin/reports')
   return { success: true }
 }

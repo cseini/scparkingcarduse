@@ -3,6 +3,7 @@ import ResetButton from './ResetButton'
 import Calendar from './Calendar'
 import { getUsageHistory } from './actions'
 
+export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
 async function getParkingCards() {

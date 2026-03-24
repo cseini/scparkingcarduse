@@ -1,5 +1,7 @@
 'use server'
 
+export const runtime = 'edge'
+
 import { supabase } from '@/lib/supabaseClient'
 import { revalidatePath } from 'next/cache'
 import { startOfMonth, endOfMonth } from 'date-fns'

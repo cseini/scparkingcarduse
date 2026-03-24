@@ -278,11 +278,11 @@ export async function addReport(profileId: number | null, type: string, content:
     });
 
     if (publicKey && privateKey) {
-      webpush.setVapidDetails(
-        'https://scparking.pages.dev',
+      const vapidDetails = {
+        subject: 'mailto:admin@scparking.pages.dev',
         publicKey,
         privateKey
-      )
+      };
 
       const { data: subs, error: subError } = await supabase.from('parking_push_subscriptions').select('subscription');
       
@@ -300,7 +300,7 @@ export async function addReport(profileId: number | null, type: string, content:
         })
 
         const results = await Promise.allSettled((subs as any[]).map((sub: any) => 
-          webpush.sendNotification(sub.subscription, payload)
+          webpush.sendNotification(sub.subscription, payload, { vapidDetails })
         ));
 
         results.forEach((res, i) => {

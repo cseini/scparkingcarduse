@@ -212,18 +212,6 @@ export async function setProfileCookieAction(id: string) {
 
 import webpush from 'web-push'
 
-// VAPID 설정
-const vapidKeys = {
-  publicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  privateKey: process.env.VAPID_PRIVATE_KEY!,
-}
-
-webpush.setVapidDetails(
-  'mailto:admin@example.com',
-  vapidKeys.publicKey,
-  vapidKeys.privateKey
-)
-
 export async function addReport(profileId: number | null, type: string, content: string) {
   const { error } = await supabase
     .from('parking_app_feedback')
@@ -236,22 +224,32 @@ export async function addReport(profileId: number | null, type: string, content:
 
   // 푸시 알림 발송 로직
   try {
-    const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription')
+    // VAPID 설정 (함수 내부로 이동하여 빌드 오류 방지)
+    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!;
+    const privateKey = process.env.VAPID_PRIVATE_KEY!;
     
-    if (subs && subs.length > 0) {
-      const payload = JSON.stringify({
-        title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 새로운 기능 제안',
-        body: content.length > 50 ? content.substring(0, 50) + '...' : content,
-        url: '/'
-      })
+    if (publicKey && privateKey) {
+      webpush.setVapidDetails(
+        'https://scparking.pages.dev', // 실제 도메인 또는 유효한 URL 권장
+        publicKey,
+        privateKey
+      )
 
-      // 모든 구독자에게 병렬로 발송
-      await Promise.all(subs.map(sub => 
-        webpush.sendNotification(sub.subscription, payload).catch(e => {
-          console.error('개별 푸시 발송 실패:', e)
-          // 실패한 구독 정보는 나중에 청소하는 로직을 추가할 수 있습니다.
+      const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription')
+      
+      if (subs && subs.length > 0) {
+        const payload = JSON.stringify({
+          title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 새로운 기능 제안',
+          body: content.length > 50 ? content.substring(0, 50) + '...' : content,
+          url: '/'
         })
-      ))
+
+        await Promise.all(subs.map(sub => 
+          webpush.sendNotification(sub.subscription, payload).catch(e => {
+            console.error('개별 푸시 발송 실패:', e)
+          })
+        ))
+      }
     }
   } catch (e) {
     console.error('전체 푸시 프로세스 실패:', e)

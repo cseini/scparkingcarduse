@@ -1,5 +1,4 @@
 import { supabase } from '@/lib/supabaseClient'
-import ResetButton from './ResetButton'
 import Calendar from './Calendar'
 import { getUsageHistory } from './actions'
 
@@ -33,7 +32,7 @@ export default async function Home() {
       {isEmpty ? (
         <div style={{ textAlign: 'center', padding: '3rem', background: '#fef3c7', borderRadius: '1rem', color: '#92400e' }}>
           <p>카드 데이터가 존재하지 않습니다.</p>
-          <p>아래 버튼을 눌러 초기 데이터를 생성해 주세요.</p>
+          <p>오른쪽 상단 메뉴의 [카드 관리]에서 새 카드를 등록해 주세요.</p>
         </div>
       ) : (
         <>
@@ -50,8 +49,6 @@ export default async function Home() {
           <Calendar cards={cards} history={history} />
         </>
       )}
-
-      <ResetButton isEmpty={isEmpty} />
     </main>
   )
 }

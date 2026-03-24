@@ -16,7 +16,7 @@ import {
   isSunday
 } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { useParkingCard } from './actions'
+import { useParkingCard, deleteUsageHistory } from './actions'
 
 interface UsageRecord {
   id: number
@@ -39,7 +39,9 @@ interface CalendarProps {
 export default function Calendar({ cards, history }: CalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [selectedHistory, setSelectedHistory] = useState<UsageRecord | null>(null)
   const [loading, setLoading] = useState(false)
 
   const monthStart = startOfMonth(currentMonth)
@@ -56,8 +58,15 @@ export default function Calendar({ cards, history }: CalendarProps) {
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
 
   const handleDateClick = (day: Date) => {
+    // Prevent opening "add" modal if clicking on a history tag (handled by stopPropagation in tag click)
     setSelectedDate(day)
     setIsModalOpen(true)
+  }
+
+  const handleHistoryClick = (e: React.MouseEvent, record: UsageRecord) => {
+    e.stopPropagation() // Prevent triggering the date cell click
+    setSelectedHistory(record)
+    setIsEditModalOpen(true)
   }
 
   const handleUseCard = async (cardId: number) => {
@@ -70,6 +79,28 @@ export default function Calendar({ cards, history }: CalendarProps) {
         alert(result.error)
       } else {
         setIsModalOpen(false)
+      }
+    } catch (err) {
+      console.error(err)
+      alert('오류가 발생했습니다.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteHistory = async () => {
+    if (!selectedHistory || loading) return
+    
+    if (!confirm(`'${selectedHistory.user_name}'의 사용 기록을 삭제하고 남은 횟수를 복구하시겠습니까?`)) return
+
+    setLoading(true)
+    try {
+      const result = await deleteUsageHistory(selectedHistory.id, selectedHistory.card_id)
+      if (!result.success) {
+        alert(result.error)
+      } else {
+        setIsEditModalOpen(false)
+        setSelectedHistory(null)
       }
     } catch (err) {
       console.error(err)
@@ -111,8 +142,13 @@ export default function Calendar({ cards, history }: CalendarProps) {
             >
               <span className="day-number">{format(day, 'd')}</span>
               <div className="usage-indicators">
-                {dayHistory.map((h, i) => (
-                  <div key={i} className={`usage-tag user-${h.user_name}`}>
+                {dayHistory.map((h) => (
+                  <div 
+                    key={h.id} 
+                    className={`usage-tag user-${h.user_name}`}
+                    onClick={(e) => handleHistoryClick(e, h)}
+                    title="클릭하여 수정/삭제"
+                  >
                     {h.user_name}
                   </div>
                 ))}
@@ -122,6 +158,7 @@ export default function Calendar({ cards, history }: CalendarProps) {
         })}
       </div>
 
+      {/* Add Usage Modal */}
       {isModalOpen && selectedDate && (
         <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -141,6 +178,28 @@ export default function Calendar({ cards, history }: CalendarProps) {
               ))}
             </div>
             <button className="modal-close" onClick={() => setIsModalOpen(false)}>닫기</button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit/Delete History Modal */}
+      {isEditModalOpen && selectedHistory && (
+        <div className="modal-overlay" onClick={() => setIsEditModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>사용 기록 관리</h3>
+            <p className="modal-subtitle">
+              {format(new Date(selectedHistory.used_at), 'M월 d일', { locale: ko })} - {selectedHistory.user_name}
+            </p>
+            <div className="modal-actions-vertical">
+              <button 
+                className="delete-history-btn" 
+                onClick={handleDeleteHistory}
+                disabled={loading}
+              >
+                {loading ? '처리 중...' : '이 기록 삭제 및 횟수 복구'}
+              </button>
+            </div>
+            <button className="modal-close" onClick={() => setIsEditModalOpen(false)}>닫기</button>
           </div>
         </div>
       )}

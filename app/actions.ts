@@ -157,3 +157,43 @@ export async function updateParkingCard(id: number, userName: string, remainingU
   revalidatePath('/manage')
   return { success: true }
 }
+
+export async function deleteUsageHistory(historyId: number, cardId: number) {
+  // 1. Get current card status to refund the usage
+  const { data: card, error: cardError } = await supabase
+    .from('parking_cards')
+    .select('remaining_uses')
+    .eq('id', cardId)
+    .single()
+
+  if (cardError || !card) {
+    console.error('Error fetching card for refund:', cardError)
+    return { success: false, error: '카드 정보를 가져오는 데 실패했습니다.' }
+  }
+
+  // 2. Delete the history record
+  const { error: deleteError } = await supabase
+    .from('parking_usage_history')
+    .delete()
+    .eq('id', historyId)
+
+  if (deleteError) {
+    console.error('Error deleting history:', deleteError)
+    return { success: false, error: '이력 삭제 중 오류가 발생했습니다.' }
+  }
+
+  // 3. Refund the usage count
+  const { error: updateError } = await supabase
+    .from('parking_cards')
+    .update({ remaining_uses: card.remaining_uses + 1 })
+    .eq('id', cardId)
+
+  if (updateError) {
+    console.error('Error refunding card usage:', updateError)
+    // Even if refund fails, the history is deleted. But let's report the error.
+    return { success: false, error: '이력은 삭제되었으나 카드 횟수 복구에 실패했습니다.' }
+  }
+
+  revalidatePath('/')
+  return { success: true }
+}

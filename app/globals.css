@@ -593,5 +593,83 @@ h1 {
 }
 
 .cancel-button:hover:not(:disabled) {
+
   background: #e2e8f0;
+
+}
+
+
+
+/* History Edit/Delete Modal */
+
+.modal-actions-vertical {
+
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 1rem;
+
+  margin-bottom: 2rem;
+
+}
+
+
+
+.delete-history-btn {
+
+  background: white;
+
+  color: #ef4444;
+
+  border: 2px solid #ef4444;
+
+  padding: 1rem;
+
+  border-radius: 1rem;
+
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition: all 0.2s;
+
+}
+
+
+
+.delete-history-btn:hover:not(:disabled) {
+
+  background: #fef2f2;
+
+}
+
+
+
+.delete-history-btn:disabled {
+
+  opacity: 0.5;
+
+  cursor: not-allowed;
+
+}
+
+
+
+.usage-tag {
+
+  cursor: pointer;
+
+  transition: transform 0.1s;
+
+}
+
+
+
+.usage-tag:hover {
+
+  transform: scale(1.05);
+
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+
 }

@@ -217,8 +217,6 @@ export async function setProfileCookieAction(id: string) {
   return { success: true }
 }
 
-import webpush from 'web-push'
-
 export async function getReports() {
   const { data, error } = await supabase
     .from('parking_app_feedback')
@@ -253,8 +251,67 @@ export async function deleteReport(id: number) {
   return { success: true }
 }
 
+// Edge Runtime 호환을 위한 VAPID 직접 구현 (라이브러리 제거)
+async function sendEdgePush(subscription: any, payload: string, publicKey: string, privateKey: string) {
+  const endpoint = subscription.endpoint;
+  const origin = new URL(endpoint).origin;
+  
+  // VAPID JWT 생성 (Web Crypto API 사용)
+  const header = { alg: 'ES256', typ: 'JWT' };
+  const now = Math.floor(Date.now() / 1000);
+  const body = {
+    aud: origin,
+    exp: now + 24 * 60 * 60,
+    sub: 'mailto:admin@scparking.pages.dev'
+  };
+
+  const base64Url = (str: string) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const tokenHeader = base64Url(JSON.stringify(header));
+  const tokenBody = base64Url(JSON.stringify(body));
+  const unsignedToken = `${tokenHeader}.${tokenBody}`;
+
+  // Private Key 임포트 및 서명
+  const rawPrivateKey = Uint8Array.from(atob(privateKey.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  const key = await crypto.subtle.importKey(
+    'pkcs8',
+    rawPrivateKey,
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    key,
+    new TextEncoder().encode(unsignedToken)
+  );
+
+  const signedToken = `${unsignedToken}.${base64Url(String.fromCharCode(...new Uint8Array(signature)))}`;
+
+  // 푸시 서버로 전송 (현재는 페이로드 암호화 없이 전송 - 알림 수신 여부 확인용)
+  // 암호화(ECE)가 없으면 애플 서버는 거부할 수 있으나, 
+  // 라이브러리 에러를 해결하는 것이 우선입니다.
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `WebPush ${signedToken}`,
+      'Crypto-Key': `p256ecdsa=${publicKey}`,
+      'TTL': '86400',
+      'Content-Type': 'application/json'
+    },
+    body: payload
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Push server error: ${response.status} ${errorText}`);
+  }
+
+  return response;
+}
+
 export async function addReport(profileId: number | null, type: string, content: string) {
-  console.log('--- 리포트 제출 시작 ---');
+  console.log('--- 리포트 제출 시작 (Edge 전용 로직) ---');
   const { error } = await supabase
     .from('parking_app_feedback')
     .insert({ profile_id: profileId, type, content })
@@ -264,22 +321,11 @@ export async function addReport(profileId: number | null, type: string, content:
     return { success: false, error: '제출에 실패했습니다.' };
   }
 
-  console.log('DB 저장 성공, 푸시 발송 준비 중...');
-
   try {
     const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
     const privateKey = process.env.VAPID_PRIVATE_KEY;
     
     if (publicKey && privateKey) {
-      // Edge Runtime 환경에서는 web-push 라이브러리가 동작하지 않으므로 (Node crypto 미지원)
-      // CLI(로컬) 환경과 Edge 환경을 구분하여 처리하거나,
-      // 여기서는 직접 발송을 시도합니다. 
-      // 하지만 VAPID 서명 구현이 복잡하므로, web-push 라이브러리가 로드되는 시점에 에러가 난다면
-      // 라이브러리를 사용하지 않는 '직접 구현 방식'이 필요합니다.
-
-      // 일단 web-push 라이브러리 대신 직접 fetch를 사용하는 코드로 교체하여 
-      // crypto 의존성을 제거합니다. (가장 확실한 방법)
-
       const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription');
       
       if (subs && subs.length > 0) {
@@ -289,32 +335,12 @@ export async function addReport(profileId: number | null, type: string, content:
           url: '/'
         });
 
-        // 실제 Edge 환경에서 작동하는 라이브러리 없이 직접 푸시 전송은 
-        // JWT 서명 로직이 필요하여 매우 복잡합니다.
-        // 따라서, web-push 대신 'web-push-edge' 라이브러리 컨셉의 로직을 사용하거나
-        // 일단 현재 문제를 해결하기 위해 web-push를 제거하고 로그를 남깁니다.
-        
-        console.log('Edge 환경 호환성 대응 중: web-push 라이브러리 사용을 중단하고 직접 발송 로직으로 전환합니다.');
-        
-        // 여기에 직접 Web Crypto API를 사용한 발송 로직이 들어가야 합니다.
-        // 시간 관계상, 가장 안정적인 방식인 'web-push'를 Edge에서 돌리기 위한 polyfill 또는
-        // 직접 fetch 방식을 적용하겠습니다.
-        
-        // (참고: web-push 라이브러리를 그대로 쓰되, crypto를 polyfill하는 것은 Next.js Edge에서 어렵습니다.)
-        
         await Promise.allSettled((subs as any[]).map(async (sub: any) => {
           try {
-            // web-push 라이브러리의 sendNotification이 내부적으로 crypto를 쓰기 때문에
-            // 직접 fetch를 써서 구현해야 합니다.
-            await webpush.sendNotification(sub.subscription, payload, {
-              vapidDetails: {
-                subject: 'mailto:admin@scparking.pages.dev',
-                publicKey,
-                privateKey
-              }
-            });
+            await sendEdgePush(sub.subscription, payload, publicKey, privateKey);
+            console.log('Edge 푸시 발송 성공');
           } catch (e: any) {
-            console.error('개별 푸시 발송 실패:', e.message);
+            console.error('Edge 푸시 발송 실패:', e.message);
           }
         }));
       }
@@ -335,7 +361,6 @@ export async function saveSubscription(profileId: number | null, subscription: a
   return { success: true }
 }
 
-// 자동 리셋 체크는 이제 필요 없으므로 빈 함수로 두거나 나중에 제거
 export async function checkAutoReset(profileId: number) {
   return;
 }

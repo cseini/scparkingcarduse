@@ -56,8 +56,28 @@ export default function ReportClient({ activeProfileId, activeProfileName }: Rep
         return
       }
 
-      const registration = await navigator.serviceWorker.register('/sw.js')
+      let registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) {
+        registration = await navigator.serviceWorker.register('/sw.js');
+      }
+
+      // 서비스 워커가 활성화될 때까지 대기 (아이폰 사파리 호환성)
+      await navigator.serviceWorker.ready;
       
+      // 혹시 모르니 활성 상태 확인 및 대기
+      if (!registration.active) {
+        await new Promise<void>((resolve) => {
+          const sw = registration!.installing || registration!.waiting;
+          if (sw) {
+            sw.addEventListener('statechange', (e: any) => {
+              if (e.target.state === 'activated') resolve();
+            });
+          } else {
+            resolve();
+          }
+        });
+      }
+
       const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       if (!publicKey) {
         throw new Error('VAPID Public Key가 설정되지 않았습니다.');

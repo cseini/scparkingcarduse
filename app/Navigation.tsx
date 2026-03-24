@@ -39,12 +39,10 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
     setSelectedProfileId(initialProfileId)
   }, [initialProfileId])
 
-  // Auto-select first profile if none exists
+  // If no profile is selected and profiles exist, open selection modal
   useEffect(() => {
     if (profiles.length > 0 && !selectedProfileId) {
-      const firstId = profiles[0].id.toString()
-      setSelectedProfileId(firstId)
-      setProfileCookieAction(firstId)
+      setIsProfileModalOpen(true)
     }
   }, [profiles, selectedProfileId])
 
@@ -105,7 +103,7 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
   const toggleMenu = () => setIsOpen(!isOpen)
 
   const activeProfile = profiles.find(p => p.id.toString() === selectedProfileId)
-  const activeName = activeProfile ? activeProfile.name : (profiles[0]?.name || '없음')
+  const activeName = activeProfile ? activeProfile.name : null
 
   return (
     <>
@@ -121,9 +119,19 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
           </Link>
           
           <div className="header-actions">
-            <div className="active-profile-card" onClick={() => setIsProfileModalOpen(true)}>
-              <div className="profile-avatar">{activeName[0]}</div>
-              <span className="profile-name-text">{activeName}</span>
+            <div 
+              className={`active-profile-card ${!activeName ? 'unselected' : ''}`} 
+              onClick={() => setIsProfileModalOpen(true)}
+              style={!activeName ? { border: '1.5px dashed #cbd5e1', background: '#f1f5f9' } : {}}
+            >
+              {activeName ? (
+                <>
+                  <div className="profile-avatar">{activeName[0]}</div>
+                  <span className="profile-name-text">{activeName}</span>
+                </>
+              ) : (
+                <span className="profile-name-text" style={{ color: '#64748b' }}>프로필 선택</span>
+              )}
             </div>
 
             <button className="hamburger" onClick={toggleMenu} aria-label="메뉴 열기">
@@ -157,6 +165,11 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
               <li>
                 <Link href="/report" className={`menu-item ${pathname === '/report' ? 'active' : ''}`} onClick={toggleMenu}>버그 리포트</Link>
               </li>
+              {activeName === '세인' && (
+                <li>
+                  <Link href="/admin/reports" className={`menu-item ${pathname === '/admin/reports' ? 'active' : ''}`} onClick={toggleMenu}>🐞 제보 목록 (Admin)</Link>
+                </li>
+              )}
             </ul>
           </nav>
         </>

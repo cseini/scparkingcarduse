@@ -212,6 +212,30 @@ export async function setProfileCookieAction(id: string) {
 
 import webpush from 'web-push'
 
+export async function getReports() {
+  const { data, error } = await supabase
+    .from('parking_app_feedback')
+    .select('*, profiles(name)')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching reports:', error)
+    return []
+  }
+  return data || []
+}
+
+export async function deleteReport(id: number) {
+  const { error } = await supabase
+    .from('parking_app_feedback')
+    .delete()
+    .eq('id', id)
+
+  if (error) return { success: false, error: '삭제 실패' }
+  revalidatePath('/admin/reports')
+  return { success: true }
+}
+
 export async function addReport(profileId: number | null, type: string, content: string) {
   const { error } = await supabase
     .from('parking_app_feedback')

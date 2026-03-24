@@ -56,6 +56,15 @@ export default function Navigation() {
                   카드 관리
                 </Link>
               </li>
+              <li>
+                <Link 
+                  href="/profiles" 
+                  className={`menu-item ${pathname === '/profiles' ? 'active' : ''}`}
+                  onClick={toggleMenu}
+                >
+                  프로필 관리
+                </Link>
+              </li>
             </ul>
           </nav>
         </>

@@ -197,3 +197,48 @@ export async function deleteUsageHistory(historyId: number, cardId: number) {
   revalidatePath('/')
   return { success: true }
 }
+
+export async function getProfiles() {
+  const { data, error } = await supabase.from('profiles').select('*').order('id')
+  if (error) {
+    console.error('Error fetching profiles:', error)
+    return []
+  }
+  return data || []
+}
+
+export async function addProfile(name: string, color: string) {
+  const { error } = await supabase.from('profiles').insert({ name, color })
+  if (error) {
+    console.error('Error adding profile:', error)
+    return { success: false, error: '프로필 추가 중 오류가 발생했습니다.' }
+  }
+  revalidatePath('/')
+  revalidatePath('/manage')
+  revalidatePath('/profiles')
+  return { success: true }
+}
+
+export async function updateProfile(id: number, name: string, color: string) {
+  const { error } = await supabase.from('profiles').update({ name, color }).eq('id', id)
+  if (error) {
+    console.error('Error updating profile:', error)
+    return { success: false, error: '프로필 수정 중 오류가 발생했습니다.' }
+  }
+  revalidatePath('/')
+  revalidatePath('/manage')
+  revalidatePath('/profiles')
+  return { success: true }
+}
+
+export async function deleteProfile(id: number) {
+  const { error } = await supabase.from('profiles').delete().eq('id', id)
+  if (error) {
+    console.error('Error deleting profile:', error)
+    return { success: false, error: '프로필 삭제 중 오류가 발생했습니다.' }
+  }
+  revalidatePath('/')
+  revalidatePath('/manage')
+  revalidatePath('/profiles')
+  return { success: true }
+}

@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabaseClient'
 import Calendar from './Calendar'
-import { getUsageHistory } from './actions'
+import { getUsageHistory, getProfiles } from './actions'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
@@ -22,8 +22,14 @@ async function getParkingCards() {
 export default async function Home() {
   const now = new Date()
   const cards = await getParkingCards()
+  const profiles = await getProfiles()
   const history = await getUsageHistory(now.getFullYear(), now.getMonth() + 1)
   const isEmpty = cards.length === 0
+
+  const getProfileColor = (name: string) => {
+    const profile = profiles.find((p) => p.name === name)
+    return profile?.color || '#cbd5e1'
+  }
 
   return (
     <main className="container">
@@ -37,16 +43,23 @@ export default async function Home() {
       ) : (
         <>
           <div className="card-grid">
-            {cards.map((card) => (
-              <div key={card.id} className={`parking-card user-${card.user_name}`}>
-                <h3 className="user-name">{card.user_name}</h3>
-                <div className="remaining">{card.remaining_uses}</div>
-                <div className="remaining-label">회 남음</div>
-              </div>
-            ))}
+            {cards.map((card) => {
+              const color = getProfileColor(card.user_name)
+              return (
+                <div 
+                  key={card.id} 
+                  className="parking-card"
+                  style={{ borderColor: color, backgroundColor: `${color}10` }}
+                >
+                  <h3 className="user-name" style={{ color }}>{card.user_name}</h3>
+                  <div className="remaining" style={{ color }}>{card.remaining_uses}</div>
+                  <div className="remaining-label">회 남음</div>
+                </div>
+              )
+            })}
           </div>
 
-          <Calendar cards={cards} history={history} />
+          <Calendar cards={cards} history={history} profiles={profiles} />
         </>
       )}
     </main>

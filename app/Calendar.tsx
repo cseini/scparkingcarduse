@@ -31,12 +31,19 @@ interface ParkingCardData {
   remaining_uses: number
 }
 
+interface Profile {
+  id: number
+  name: string
+  color: string
+}
+
 interface CalendarProps {
   cards: ParkingCardData[]
   history: UsageRecord[]
+  profiles: Profile[]
 }
 
-export default function Calendar({ cards, history }: CalendarProps) {
+export default function Calendar({ cards, history, profiles }: CalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -56,6 +63,11 @@ export default function Calendar({ cards, history }: CalendarProps) {
 
   const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1))
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
+
+  const getProfileColor = (name: string) => {
+    const profile = profiles.find((p) => p.name === name)
+    return profile?.color || '#cbd5e1'
+  }
 
   const handleDateClick = (day: Date) => {
     // Prevent opening "add" modal if clicking on a history tag (handled by stopPropagation in tag click)
@@ -142,16 +154,20 @@ export default function Calendar({ cards, history }: CalendarProps) {
             >
               <span className="day-number">{format(day, 'd')}</span>
               <div className="usage-indicators">
-                {dayHistory.map((h) => (
-                  <div 
-                    key={h.id} 
-                    className={`usage-tag user-${h.user_name}`}
-                    onClick={(e) => handleHistoryClick(e, h)}
-                    title="클릭하여 수정/삭제"
-                  >
-                    {h.user_name}
-                  </div>
-                ))}
+                {dayHistory.map((h) => {
+                  const color = getProfileColor(h.user_name)
+                  return (
+                    <div 
+                      key={h.id} 
+                      className="usage-tag"
+                      style={{ backgroundColor: `${color}30`, color: color }}
+                      onClick={(e) => handleHistoryClick(e, h)}
+                      title="클릭하여 수정/삭제"
+                    >
+                      {h.user_name}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )
@@ -165,17 +181,21 @@ export default function Calendar({ cards, history }: CalendarProps) {
             <h3>{format(selectedDate, 'M월 d일', { locale: ko })} 카드 사용 기록</h3>
             <p className="modal-subtitle">기록할 카드를 선택하세요</p>
             <div className="modal-buttons">
-              {cards.map((card) => (
-                <button 
-                  key={card.id} 
-                  className={`modal-use-button user-${card.user_name}`}
-                  onClick={() => handleUseCard(card.id)}
-                  disabled={loading || card.remaining_uses <= 0}
-                >
-                  <span className="button-user-name">{card.user_name}</span>
-                  <span className="button-remaining">({card.remaining_uses}회 남음)</span>
-                </button>
-              ))}
+              {cards.map((card) => {
+                const color = getProfileColor(card.user_name)
+                return (
+                  <button 
+                    key={card.id} 
+                    className="modal-use-button"
+                    style={{ borderColor: color }}
+                    onClick={() => handleUseCard(card.id)}
+                    disabled={loading || card.remaining_uses <= 0}
+                  >
+                    <span className="button-user-name" style={{ color }}>{card.user_name}</span>
+                    <span className="button-remaining">({card.remaining_uses}회 남음)</span>
+                  </button>
+                )
+              })}
             </div>
             <button className="modal-close" onClick={() => setIsModalOpen(false)}>닫기</button>
           </div>

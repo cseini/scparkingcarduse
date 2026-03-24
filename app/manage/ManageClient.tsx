@@ -36,7 +36,6 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
   // Edit state
   const [editingCardId, setEditingCardId] = useState<number | null>(null)
   const [editUserName, setEditUserName] = useState('')
-  const [editRemainingUses, setEditRemainingUses] = useState(0)
   const [editColor, setEditColor] = useState('')
   const [showEditColorPopup, setShowEditColorPopup] = useState(false)
 
@@ -90,7 +89,6 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
   const handleEditStart = (card: Card) => {
     setEditingCardId(card.id)
     setEditUserName(card.user_name)
-    setEditRemainingUses(card.remaining_uses)
     setEditColor(card.color || PRESET_COLORS[0])
   }
 
@@ -103,7 +101,7 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
 
     setLoading(true)
     try {
-      const result = await updateParkingCard(id, editUserName.trim(), editRemainingUses, activeProfileId, editColor)
+      const result = await updateParkingCard(id, editUserName.trim(), activeProfileId, editColor)
       if (!result.success) {
         alert(result.error)
       } else {
@@ -219,17 +217,8 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
                         value={editUserName} 
                         onChange={(e) => setEditUserName(e.target.value)}
                         className="input-field edit-name"
-                        style={{ flex: 2 }}
-                        placeholder="이름"
-                      />
-                      <input 
-                        type="number" 
-                        value={editRemainingUses} 
-                        onChange={(e) => setEditRemainingUses(Number(e.target.value))}
-                        className="input-field edit-uses"
-                        min="0"
                         style={{ flex: 1 }}
-                        placeholder="횟수"
+                        placeholder="이름"
                       />
                       <button 
                         type="button" 

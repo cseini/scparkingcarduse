@@ -6,21 +6,40 @@ import { cookies } from 'next/headers'
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
+import { startOfMonth, endOfMonth } from 'date-fns'
+
 async function getParkingCards(profileId?: number) {
   if (!profileId) return []
 
-  const { data, error } = await supabase
+  const { data: cards, error } = await supabase
     .from('parking_cards')
-    .select('id, user_name, remaining_uses, profile_id, color')
+    .select('id, user_name, profile_id, color')
     .eq('profile_id', profileId)
     .order('id', { ascending: true })
 
-  if (error) {
+  if (error || !cards) {
     console.error('Error fetching parking cards:', error)
     return []
   }
 
-  return data || []
+  // 이번 달 사용 횟수를 이력 테이블에서 실시간으로 계산
+  const now = new Date()
+  const start = startOfMonth(now).toISOString()
+  const end = endOfMonth(now).toISOString()
+
+  const { data: history } = await supabase
+    .from('parking_usage_history')
+    .select('card_id')
+    .gte('used_at', start)
+    .lte('used_at', end)
+
+  return cards.map(card => {
+    const usedCount = history?.filter(h => h.card_id === card.id).length || 0
+    return {
+      ...card,
+      remaining_uses: Math.max(0, 3 - usedCount)
+    }
+  })
 }
 
 export default async function ManagePage() {

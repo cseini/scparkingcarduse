@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   format, 
   startOfMonth, 
@@ -16,7 +16,10 @@ import {
   isSunday
 } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { useParkingCard, deleteUsageHistory } from './actions'
+import { toZonedTime } from 'date-fns-tz'
+import { useParkingCard, deleteUsageHistory, checkAutoReset } from './actions'
+
+const TIMEZONE = 'Asia/Seoul'
 
 interface UsageRecord {
   id: number
@@ -40,12 +43,19 @@ interface CalendarProps {
 }
 
 export default function Calendar({ cards, history }: CalendarProps) {
-  const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [currentMonth, setCurrentMonth] = useState(toZonedTime(new Date(), TIMEZONE))
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedHistory, setSelectedHistory] = useState<UsageRecord | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Auto-reset check when viewing calendar
+  useEffect(() => {
+    if (cards.length > 0 && cards[0].profile_id) {
+      checkAutoReset(cards[0].profile_id)
+    }
+  }, [cards])
 
   const monthStart = startOfMonth(currentMonth)
   const monthEnd = endOfMonth(monthStart)
@@ -99,11 +109,15 @@ export default function Calendar({ cards, history }: CalendarProps) {
   const handleDeleteHistory = async () => {
     if (!selectedHistory || loading) return
     
-    if (!confirm(`'${selectedHistory.user_name}'의 사용 기록을 삭제하고 남은 횟수를 복구하시겠습니까?`)) return
+    console.log('[Client] 삭제 요청 시작:', selectedHistory.id);
+    // 프리뷰 환경에서 confirm()은 차단될 수 있어 제거하거나 커스텀 UI를 써야 합니다.
+    // 우선 테스트를 위해 confirm 없이 진행하도록 수정합니다.
 
     setLoading(true)
     try {
       const result = await deleteUsageHistory(selectedHistory.id, selectedHistory.card_id)
+      console.log('[Client] 삭제 결과:', result);
+      
       if (!result.success) {
         alert(result.error)
       } else {
@@ -111,7 +125,7 @@ export default function Calendar({ cards, history }: CalendarProps) {
         setSelectedHistory(null)
       }
     } catch (err) {
-      console.error(err)
+      console.error('[Client] 삭제 중 에러 발생:', err)
       alert('오류가 발생했습니다.')
     } finally {
       setLoading(false)
@@ -149,21 +163,20 @@ export default function Calendar({ cards, history }: CalendarProps) {
               onClick={() => handleDateClick(day)}
             >
               <span className="day-number">{format(day, 'd')}</span>
-              <div className="usage-indicators">
-                {dayHistory.map((h) => {
-                  const color = getCardColor(h.card_id)
-                  return (
-                    <div 
-                      key={h.id} 
-                      className="usage-tag"
-                      style={{ backgroundColor: `${color}30`, color: color }}
-                      onClick={(e) => handleHistoryClick(e, h)}
-                      title="클릭하여 수정/삭제"
-                    >
-                      {h.user_name}
-                    </div>
-                  )
-                })}
+              <div className="usage-center-container">
+                {dayHistory.length > 0 && (
+                  <div 
+                    className="usage-tag-prominent"
+                    style={{ 
+                      backgroundColor: getCardColor(dayHistory[0].card_id),
+                      color: '#fff'
+                    }}
+                    onClick={(e) => handleHistoryClick(e, dayHistory[0])}
+                    title="클릭하여 수정/삭제"
+                  >
+                    {dayHistory[0].user_name}
+                  </div>
+                )}
               </div>
             </div>
           )

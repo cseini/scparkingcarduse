@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import Cookies from 'js-cookie'
+import ProfileManagerModal from './ProfileManagerModal'
+import { checkProfilePin, setProfileCookieAction } from './actions'
 
 interface Profile {
   id: number
@@ -12,29 +14,83 @@ interface Profile {
 
 interface NavigationProps {
   profiles: Profile[]
+  initialProfileId: string
 }
 
-export default function Navigation({ profiles }: NavigationProps) {
+export default function Navigation({ profiles, initialProfileId }: NavigationProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+  const [isManageModalOpen, setIsManageModalOpen] = useState(false)
+  
+  // PIN Modal state
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false)
+  const [targetProfile, setTargetProfile] = useState<Profile | null>(null)
+  const [pinInput, setPinInput] = useState('')
+  const [pinLoading, setPinLoading] = useState(false)
+  const [pinError, setPinError] = useState('')
+
   const pathname = usePathname()
   const router = useRouter()
   
-  // Try to load initial profile from cookies
-  const initialProfileId = Cookies.get('selected_profile_id')
-  const [selectedProfileId, setSelectedProfileId] = useState<string>(initialProfileId || 'all')
+  const [selectedProfileId, setSelectedProfileId] = useState<string>(initialProfileId)
 
-  // Listen to profile changes and set cookie
+  // Sync state if prop changes (e.g. from server update)
   useEffect(() => {
-    if (selectedProfileId === 'all') {
-      Cookies.remove('selected_profile_id')
-    } else {
-      Cookies.set('selected_profile_id', selectedProfileId, { expires: 365 })
+    setSelectedProfileId(initialProfileId)
+  }, [initialProfileId])
+
+  // Auto-select first profile if none exists
+  useEffect(() => {
+    if (profiles.length > 0 && !selectedProfileId) {
+      const firstId = profiles[0].id.toString()
+      setSelectedProfileId(firstId)
+      setProfileCookieAction(firstId)
     }
-    // Simple way to refresh the current route to refetch data with new cookie
-    router.refresh()
-  }, [selectedProfileId, router])
+  }, [profiles, selectedProfileId])
+
+  const handleProfileClick = (profile: Profile) => {
+    if (profile.id.toString() === selectedProfileId) {
+      setIsProfileModalOpen(false)
+      return
+    }
+    setTargetProfile(profile)
+    setPinInput('')
+    setPinError('')
+    setIsPinModalOpen(true)
+  }
+
+  const handlePinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!targetProfile || pinInput.length !== 4 || pinLoading) return
+
+    setPinLoading(true)
+    setPinError('')
+    try {
+      const result = await checkProfilePin(targetProfile.id, pinInput)
+      if (result.success) {
+        const idStr = targetProfile.id.toString()
+        setSelectedProfileId(idStr)
+        
+        await setProfileCookieAction(idStr)
+        
+        setIsPinModalOpen(false)
+        setIsProfileModalOpen(false)
+        setPinInput('')
+      } else {
+        setPinError(result.error || '핀코드가 일치하지 않습니다.')
+        setPinInput('')
+      }
+    } catch (err) {
+      setPinError('오류가 발생했습니다.')
+    } finally {
+      setPinLoading(false)
+    }
+  }
 
   const toggleMenu = () => setIsOpen(!isOpen)
+
+  const activeProfile = profiles.find(p => p.id.toString() === selectedProfileId)
+  const activeName = activeProfile ? activeProfile.name : (profiles[0]?.name || '없음')
 
   return (
     <>
@@ -45,17 +101,10 @@ export default function Navigation({ profiles }: NavigationProps) {
           </Link>
           
           <div className="header-actions">
-            <select 
-              className="profile-select"
-              value={selectedProfileId}
-              onChange={(e) => setSelectedProfileId(e.target.value)}
-              aria-label="프로필 선택"
-            >
-              <option value="all">모든 프로필</option>
-              {profiles.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <div className="active-profile-card" onClick={() => setIsProfileModalOpen(true)}>
+              <div className="profile-avatar">{activeName[0]}</div>
+              <span className="profile-name-text">{activeName}</span>
+            </div>
 
             <button className="hamburger" onClick={toggleMenu} aria-label="메뉴 열기">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -80,35 +129,97 @@ export default function Navigation({ profiles }: NavigationProps) {
             </button>
             <ul className="menu-list">
               <li>
-                <Link 
-                  href="/" 
-                  className={`menu-item ${pathname === '/' ? 'active' : ''}`}
-                  onClick={toggleMenu}
-                >
-                  홈 (캘린더)
-                </Link>
+                <Link href="/" className={`menu-item ${pathname === '/' ? 'active' : ''}`} onClick={toggleMenu}>홈 (캘린더)</Link>
               </li>
               <li>
-                <Link 
-                  href="/manage" 
-                  className={`menu-item ${pathname === '/manage' ? 'active' : ''}`}
-                  onClick={toggleMenu}
-                >
-                  카드 관리
-                </Link>
-              </li>
-              <li>
-                <Link 
-                  href="/profiles" 
-                  className={`menu-item ${pathname === '/profiles' ? 'active' : ''}`}
-                  onClick={toggleMenu}
-                >
-                  프로필 관리
-                </Link>
+                <Link href="/manage" className={`menu-item ${pathname === '/manage' ? 'active' : ''}`} onClick={toggleMenu}>카드 관리</Link>
               </li>
             </ul>
           </nav>
         </>
+      )}
+
+      {/* Profile Selection Modal */}
+      {isProfileModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsProfileModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0 }}>프로필 선택</h3>
+              <button 
+                onClick={() => { setIsProfileModalOpen(false); setIsManageModalOpen(true); }}
+                style={{ fontSize: '0.75rem', background: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.4rem 0.75rem', borderRadius: '0.5rem', cursor: 'pointer' }}
+              >
+                관리
+              </button>
+            </div>
+            
+            {profiles.length === 0 ? (
+              <p style={{ color: '#64748b', padding: '1rem' }}>프로필이 없습니다. 관리에서 추가해 주세요.</p>
+            ) : (
+              <div className="profile-modal-grid">
+                {profiles.map(p => (
+                  <div 
+                    key={p.id}
+                    className={`profile-option-card ${selectedProfileId === p.id.toString() ? 'selected' : ''}`}
+                    onClick={() => handleProfileClick(p)}
+                  >
+                    <div className="profile-avatar">{p.name[0]}</div>
+                    <span className="profile-option-name">{p.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button className="modal-close" onClick={() => setIsProfileModalOpen(false)}>닫기</button>
+          </div>
+        </div>
+      )}
+
+      {/* PIN Input Modal */}
+      {isPinModalOpen && targetProfile && (
+        <div className="modal-overlay" onClick={() => setIsPinModalOpen(false)} style={{ zIndex: 1200 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '320px' }}>
+            <h3>PIN 코드 입력</h3>
+            <p className="modal-subtitle">[{targetProfile.name}] 프로필의 핀코드를 입력하세요.</p>
+            <form onSubmit={handlePinSubmit}>
+              <input 
+                type="password" 
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={4}
+                value={pinInput}
+                onChange={(e) => {
+                  setPinInput(e.target.value.replace(/[^0-9]/g, ''));
+                  setPinError('');
+                }}
+                className="input-field"
+                style={{ 
+                  fontSize: '2rem', 
+                  textAlign: 'center', 
+                  letterSpacing: '0.5rem', 
+                  marginBottom: pinError ? '0.5rem' : '1.5rem',
+                  borderColor: pinError ? '#ef4444' : '#cbd5e1'
+                }}
+                autoFocus
+                disabled={pinLoading}
+              />
+              {pinError && <p style={{ color: '#ef4444', fontSize: '0.8rem', marginBottom: '1rem' }}>{pinError}</p>}
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="submit" className="add-button" style={{ flex: 1 }} disabled={pinInput.length !== 4 || pinLoading}>
+                  {pinLoading ? '확인 중...' : '확인'}
+                </button>
+                <button type="button" className="modal-close" style={{ flex: 1, marginTop: 0 }} onClick={() => setIsPinModalOpen(false)}>취소</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Management Modal */}
+      {isManageModalOpen && (
+        <ProfileManagerModal 
+          profiles={profiles} 
+          onClose={() => setIsManageModalOpen(false)} 
+        />
       )}
     </>
   )

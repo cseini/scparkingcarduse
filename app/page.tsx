@@ -1,22 +1,19 @@
 import { supabase } from '@/lib/supabaseClient'
 import Calendar from './Calendar'
-import { getUsageHistory } from './actions'
+import { getUsageHistory, getProfiles } from './actions'
 import { cookies } from 'next/headers'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
 async function getParkingCards(profileId?: number) {
-  let query = supabase
+  if (!profileId) return []
+
+  const { data, error } = await supabase
     .from('parking_cards')
     .select('*')
+    .eq('profile_id', profileId)
     .order('id', { ascending: true })
-
-  if (profileId) {
-    query = query.eq('profile_id', profileId)
-  }
-
-  const { data, error } = await query
 
   if (error) {
     console.error('Error fetching parking cards:', error)
@@ -28,9 +25,16 @@ async function getParkingCards(profileId?: number) {
 
 export default async function Home() {
   const cookieStore = await cookies()
-  const profileCookie = cookieStore.get('selected_profile_id')?.value
-  const profileId = profileCookie && profileCookie !== 'all' ? Number(profileCookie) : undefined
+  const profiles = await getProfiles()
+  
+  let profileCookie = cookieStore.get('selected_profile_id')?.value
+  
+  if (!profileCookie && profiles.length > 0) {
+    profileCookie = profiles[0].id.toString()
+  }
 
+  const profileId = profileCookie ? Number(profileCookie) : undefined
+  
   const now = new Date()
   const cards = await getParkingCards(profileId)
   const history = await getUsageHistory(now.getFullYear(), now.getMonth() + 1, profileId)
@@ -42,8 +46,11 @@ export default async function Home() {
       
       {isEmpty ? (
         <div style={{ textAlign: 'center', padding: '3rem', background: '#fef3c7', borderRadius: '1rem', color: '#92400e' }}>
-          <p>선택된 프로필에 카드가 존재하지 않습니다.</p>
-          <p>오른쪽 상단 메뉴의 [카드 관리]에서 카드를 등록해 주세요.</p>
+          {profiles.length === 0 ? (
+            <p>프로필이 없습니다. 상단 프로필 버튼을 눌러 프로필을 먼저 생성해 주세요.</p>
+          ) : (
+            <p>선택된 프로필에 카드가 존재하지 않습니다. [카드 관리]에서 카드를 등록해 주세요.</p>
+          )}
         </div>
       ) : (
         <>
@@ -70,4 +77,3 @@ export default async function Home() {
     </main>
   )
 }
-

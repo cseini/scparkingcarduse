@@ -168,7 +168,7 @@ export async function deleteReport(id: number) {
 }
 
 // ---------------------------------------------------------
-// 웹푸시 암호화 및 전송 로직 (Edge Runtime 완벽 호환 버전)
+// 웹푸시 암호화 및 전송 로직 (Edge Runtime 완벽 호환 최적화 버전)
 // ---------------------------------------------------------
 
 function base64UrlToUint8Array(base64Url: string) {
@@ -177,59 +177,48 @@ function base64UrlToUint8Array(base64Url: string) {
   return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
 }
 
-function uint8ArrayToBase64Url(buf: any) {
-  const uint8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
-  return btoa(String.fromCharCode(...Array.from(uint8))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function uint8ArrayToBase64Url(buf: Uint8Array) {
+  return btoa(String.fromCharCode(...Array.from(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 async function encryptPayload(subscription: any, payload: string) {
+  const encoder = new TextEncoder();
   const p256dh = base64UrlToUint8Array(subscription.keys.p256dh);
   const auth = base64UrlToUint8Array(subscription.keys.auth);
-  const encoder = new TextEncoder();
 
-  // 1. 임시 키 쌍 생성 (Ephemeral Keys)
+  // 1. ECDH 공유 비밀 생성
   const localKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   const localPublicKey = new Uint8Array(await crypto.subtle.exportKey('raw', localKeys.publicKey));
-  
-  // 2. 공유 비밀 생성
-  const remoteKey = await crypto.subtle.importKey('raw', p256dh as any, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const remoteKey = await crypto.subtle.importKey('raw', p256dh, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
   const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: remoteKey }, localKeys.privateKey, 256));
-  
-  // 3. RFC 8291 키 유도 체인 (정밀 보정)
-  const hkdfExtract = async (salt: Uint8Array, ikm: Uint8Array) => {
-    const key = await crypto.subtle.importKey('raw', salt as any, 'HKDF', false, ['deriveBits']);
-    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: ikm as any }, key, 256));
-  };
-  const hkdfExpand = async (prk: Uint8Array, info: Uint8Array, len: number) => {
-    const key = await crypto.subtle.importKey('raw', prk as any, 'HKDF', false, ['deriveBits']);
-    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: info as any }, key, len));
+
+  // 2. HKDF 유도 (Web Crypto 표준 방식)
+  const derive = async (ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, len: number) => {
+    const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info } as any, key, len));
   };
 
-  // IKM 유도: HKDF-Extract(auth, shared_secret) -> HKDF-Expand(IKM, "Content-Encoding: auth\0", 32)
-  const prkAuth = await hkdfExtract(auth, sharedSecret);
-  const ikm = await hkdfExpand(prkAuth, encoder.encode('Content-Encoding: auth\0'), 256);
+  // IKM 유도: HKDF(salt=auth, ikm=sharedSecret, info="Content-Encoding: auth\0")
+  const ikm = await derive(sharedSecret, auth, encoder.encode('Content-Encoding: auth\0'), 256);
 
-  // Salt 생성 및 PRK 유도
+  // 3. Salt 생성 및 CEK, IV 유도
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const prk = await hkdfExtract(salt, ikm);
-  
-  // CEK(16바이트) 및 IV(12바이트) 유도
-  const cek = await hkdfExpand(prk, encoder.encode('Content-Encoding: aes128gcm\0'), 128);
-  const iv = await hkdfExpand(prk, encoder.encode('Content-Encoding: nonce\0'), 96);
+  const cek = await derive(ikm, salt, encoder.encode('Content-Encoding: aes128gcm\0'), 128);
+  const iv = await derive(ikm, salt, encoder.encode('Content-Encoding: nonce\0'), 96);
 
   // 4. AES-128-GCM 암호화
-  const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
+  const aesKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
   const plainText = encoder.encode(payload);
   const dataToEncrypt = new Uint8Array(plainText.length + 1);
   dataToEncrypt.set(plainText, 0);
-  dataToEncrypt.set([0x02], plainText.length); // 0x02 is the delimiter for aes128gcm
+  dataToEncrypt.set([0x02], plainText.length); // 0x02: 마지막 레코드 구분자
 
-  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any }, aesKey, dataToEncrypt as any));
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv } as any, aesKey, dataToEncrypt));
 
-  // 5. 최종 바이너리 구성 (RFC 8291 Header)
+  // 5. 바이너리 메시지 구성 (Salt + RS + IDLen + Key + Ciphertext)
   const result = new Uint8Array(21 + localPublicKey.length + ciphertext.length);
   result.set(salt, 0);
-  result.set([0x00, 0x00, 0x10, 0x00], 16); // rs=4096
+  result.set([0x00, 0x00, 0x10, 0x00], 16); // RS=4096
   result.set([localPublicKey.length], 20);
   result.set(localPublicKey, 21);
   result.set(ciphertext, 21 + localPublicKey.length);
@@ -240,6 +229,8 @@ async function encryptPayload(subscription: any, payload: string) {
 async function sendEdgePush(subscription: any, payload: string, publicKey: string, privateKey: string) {
   const endpoint = subscription.endpoint;
   const origin = new URL(endpoint).origin;
+  
+  // VAPID JWT 생성
   const rawPublic = base64UrlToUint8Array(publicKey);
   const rawPrivate = base64UrlToUint8Array(privateKey);
   const jwk = {
@@ -252,10 +243,16 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
   const key = await crypto.subtle.importKey('jwk', jwk as any, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
   const encoder = new TextEncoder();
   const header = uint8ArrayToBase64Url(encoder.encode(JSON.stringify({ alg: 'ES256', typ: 'JWT' })));
-  const body = uint8ArrayToBase64Url(encoder.encode(JSON.stringify({ aud: origin, exp: Math.floor(Date.now() / 1000) + 86400, sub: 'mailto:admin@scparking.pages.dev' })));
+  const body = uint8ArrayToBase64Url(encoder.encode(JSON.stringify({ 
+    aud: origin, 
+    exp: Math.floor(Date.now() / 1000) + 86400, 
+    sub: 'mailto:admin@scparking.pages.dev' 
+  })));
   const unsignedToken = `${header}.${body}`;
-  const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, encoder.encode(unsignedToken) as any);
+  const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, encoder.encode(unsignedToken));
   const signedToken = `${unsignedToken}.${uint8ArrayToBase64Url(new Uint8Array(signature))}`;
+
+  // 암호화된 페이로드 생성
   const encryptedPayload = await encryptPayload(subscription, payload);
   
   const response = await fetch(endpoint, {
@@ -266,66 +263,48 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
       'Content-Type': 'application/octet-stream',
       'Content-Encoding': 'aes128gcm'
     },
-    body: encryptedPayload as any
+    body: encryptedPayload
   });
   
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Push error: ${response.status} ${text}`);
+    throw new Error(`Status ${response.status}: ${text}`);
   }
   
-  console.log(`✅ 푸시 서버 응답 성공: ${response.status}`);
-  return response;
+  return response.status;
 }
 
 export async function addReport(profileId: number | null, type: string, content: string) {
-  const { error } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
+  const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출에 실패했습니다.' }
+  
   try {
-    // 하드코딩된 Public Key (환경 변수 이슈 방지)
     const publicKey = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
     const privateKey = process.env.VAPID_PRIVATE_KEY;
     
-    console.log('📢 푸시 알림 프로세스 시작');
-    console.log(`🔑 키 체크: Public=${!!publicKey}, Private=${!!privateKey}`);
-    
     if (publicKey && privateKey) {
-      const { data: subs, error: subError } = await supabase.from('parking_push_subscriptions').select('subscription');
-      
-      if (subError) {
-        console.error('❌ DB 구독 정보 조회 실패:', subError.message);
-      } else {
-        console.log(`🔍 조회된 구독 수: ${subs?.length || 0}개`);
+      const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription');
+      if (subs && subs.length > 0) {
+        const payload = JSON.stringify({
+          title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안',
+          body: content.length > 50 ? content.substring(0, 50) + '...' : content,
+          url: '/'
+        });
+
+        console.log(`🚀 ${subs.length}개의 기기로 푸시 발송 시작...`);
         
-        if (subs && subs.length > 0) {
-          const payload = JSON.stringify({
-            title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 새로운 기능 제안',
-            body: content.length > 50 ? content.substring(0, 50) + '...' : content,
-            url: '/'
-          });
-          
-          const results = await Promise.allSettled((subs as any[]).map(async (sub: any, index: number) => {
-            try {
-              console.log(`📤 [${index}] 푸시 발송 시도...`);
-              await sendEdgePush(sub.subscription, payload, publicKey, privateKey);
-              return { index, success: true };
-            } catch (e: any) {
-              console.error(`❌ [${index}] 발송 실패:`, e.message);
-              throw e;
-            }
-          }));
-          
-          console.log('🏁 모든 푸시 발송 시도 종료');
-        } else {
-          console.log('⚠️ 알림을 보낼 구독 정보가 없습니다.');
-        }
+        const results = await Promise.allSettled(subs.map((s: any) => sendEdgePush(s.subscription, payload, publicKey, privateKey)));
+        
+        results.forEach((res, i) => {
+          if (res.status === 'fulfilled') console.log(`✅ [${i}] 발송 성공 (Status: ${res.value})`);
+          else console.error(`❌ [${i}] 발송 실패:`, res.reason);
+        });
       }
-    } else {
-      console.warn('⚠️ VAPID 키가 설정되지 않았습니다. (Private Key 확인 필요)');
     }
   } catch (e: any) {
-    console.error('🔥 전체 푸시 프로세스 치명적 오류:', e.message);
+    console.error('🔥 푸시 엔진 치명적 오류:', e.message);
   }
+  
   return { success: true };
 }
 

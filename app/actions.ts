@@ -215,6 +215,7 @@ async function encryptPayload(subscription: any, payload: string) {
 }
 
 async function sendEdgePush(subscription: any, payload: string, publicKey: string, privateKey: string) {
+  console.log('Push 발송 시도:', subscription.endpoint.substring(0, 40) + '...');
   const endpoint = subscription.endpoint;
   const origin = new URL(endpoint).origin;
   const rawPublic = base64UrlToUint8Array(publicKey);
@@ -237,6 +238,7 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
   const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, encoder.encode(unsignedToken));
   const signedToken = `${unsignedToken}.${uint8ArrayToBase64Url(new Uint8Array(signature))}`;
   const encryptedPayload = await encryptPayload(subscription, payload);
+  
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -247,10 +249,14 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
     },
     body: encryptedPayload
   });
+
   if (!response.ok) {
     const errorText = await response.text();
+    console.error(`애플 서버 응답 에러 (${response.status}):`, errorText);
     throw new Error(`Push server error (${response.status}): ${errorText}`);
   }
+  
+  console.log('애플 서버 응답 성공:', response.status);
   return response;
 }
 
@@ -260,8 +266,12 @@ export async function addReport(profileId: number | null, type: string, content:
   try {
     const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
     const privateKey = process.env.VAPID_PRIVATE_KEY;
+    console.log('환경 변수 확인:', { hasPublic: !!publicKey, hasPrivate: !!privateKey });
+    
     if (publicKey && privateKey) {
       const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription');
+      console.log('DB에서 조회된 구독 수:', subs?.length || 0);
+      
       if (subs && subs.length > 0) {
         const payload = JSON.stringify({
           title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 새로운 기능 제안',
@@ -272,13 +282,13 @@ export async function addReport(profileId: number | null, type: string, content:
           try {
             await sendEdgePush(sub.subscription, payload, publicKey, privateKey);
           } catch (e: any) {
-            console.error('Edge 푸시 발송 오류:', e.message);
+            console.error('Edge 푸시 발송 최종 오류:', e.message);
           }
         }));
       }
     }
   } catch (e: any) {
-    console.error('전체 푸시 프로세스 오류:', e.message);
+    console.error('전체 푸시 프로세스 치명적 오류:', e.message);
   }
   return { success: true };
 }

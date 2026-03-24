@@ -274,7 +274,6 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
       'Authorization': `vapid t=${signedToken}, k=${publicKey}`,
       'TTL': '86400',
       'Urgency': 'high',
-      'Topic': url.hostname,
       'Content-Type': 'application/octet-stream',
       'Content-Encoding': 'aes128gcm'
     },

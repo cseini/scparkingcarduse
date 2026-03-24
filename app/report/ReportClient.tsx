@@ -78,10 +78,14 @@ export default function ReportClient({ activeProfileId, activeProfileName }: Rep
         });
       }
 
-      const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (!publicKey) {
-        throw new Error('VAPID Public Key가 설정되지 않았습니다.');
+      // [핵심] 기존 구독이 있다면 강제로 해제하여 새 키가 반영되도록 함
+      const existingSub = await registration.pushManager.getSubscription();
+      if (existingSub) {
+        await existingSub.unsubscribe();
       }
+
+      // 하드코딩된 새 VAPID 키 (환경변수 캐시 문제 해결용)
+      const publicKey = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
 
       const sub = await registration.pushManager.subscribe({
         userVisibleOnly: true,

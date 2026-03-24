@@ -30,6 +30,7 @@ async function testPush() {
   const { data: subs, error } = await supabase
     .from('parking_push_subscriptions')
     .select('*')
+    .order('created_at', { ascending: false })
     .limit(1);
 
   if (error || !subs || subs.length === 0) {
@@ -50,9 +51,16 @@ async function testPush() {
     console.log("✅ 푸시 알림 발송 성공!");
   } catch (err: any) {
     console.error("❌ 푸시 알림 발송 실패:");
-    console.error(err.message);
+    if (err.statusCode) {
+      console.error(`- 상태 코드: ${err.statusCode}`);
+      console.error(`- 응답 본문: ${err.body}`);
+    }
+    console.error(`- 메시지: ${err.message}`);
+    
     if (err.statusCode === 410 || err.statusCode === 404) {
       console.error("⚠️ 해당 구독 정보가 만료되었거나 유효하지 않습니다. 브라우저에서 알림을 다시 허용해 주세요.");
+    } else if (err.statusCode === 403) {
+      console.error("⚠️ VAPID 키 인증 실패 (Forbidden). Public/Private 키 쌍이 일치하는지, 클라이언트와 서버의 키가 동일한지 확인하세요.");
     }
   }
 }

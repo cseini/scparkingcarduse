@@ -268,10 +268,13 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
     },
     body: encryptedPayload as any
   });
+  
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Push error: ${response.status} ${text}`);
   }
+  
+  console.log(`✅ 푸시 서버 응답 성공: ${response.status}`);
   return response;
 }
 

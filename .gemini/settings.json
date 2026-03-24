@@ -1,0 +1,10 @@
+{
+  "model": {
+    "name": "gemini-1.5-pro"
+  },
+  "general": {
+    "plan": {
+      "modelRouting": false
+    }
+  }
+}

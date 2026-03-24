@@ -187,7 +187,7 @@ async function encryptPayload(subscription: any, payload: string) {
   const auth = base64UrlToUint8Array(subscription.keys.auth);
   const encoder = new TextEncoder();
 
-  // 1. 임시 키 생성
+  // 1. 임시 키 쌍 생성 (Ephemeral Keys)
   const localKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   const localPublicKey = new Uint8Array(await crypto.subtle.exportKey('raw', localKeys.publicKey));
   
@@ -195,39 +195,39 @@ async function encryptPayload(subscription: any, payload: string) {
   const remoteKey = await crypto.subtle.importKey('raw', p256dh as any, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
   const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: remoteKey }, localKeys.privateKey, 256));
   
-  // 3. HKDF 키 유도 (RFC 8291 표준)
-  const hkdfExtract = async (s: any, i: any) => {
-    const key = await crypto.subtle.importKey('raw', s, 'HKDF', false, ['deriveBits']);
-    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: i }, key, 256));
+  // 3. RFC 8291 키 유도 체인 (정밀 보정)
+  const hkdfExtract = async (salt: Uint8Array, ikm: Uint8Array) => {
+    const key = await crypto.subtle.importKey('raw', salt, 'HKDF', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: ikm }, key, 256));
   };
-  const hkdfExpand = async (prk: any, i: any, len: number) => {
+  const hkdfExpand = async (prk: Uint8Array, info: Uint8Array, len: number) => {
     const key = await crypto.subtle.importKey('raw', prk, 'HKDF', false, ['deriveBits']);
-    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: i }, key, len));
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info }, key, len));
   };
 
-  // IKM 유도
-  const ikm = await hkdfExtract(auth, sharedSecret);
+  // IKM 유도: HKDF-Extract(auth, shared_secret) -> HKDF-Expand(IKM, "Content-Encoding: auth\0", 32)
+  const prkAuth = await hkdfExtract(auth, sharedSecret);
+  const ikm = await hkdfExpand(prkAuth, encoder.encode('Content-Encoding: auth\0'), 256);
 
-  // Salt 및 PRK 생성
+  // Salt 생성 및 PRK 유도
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const prk = await hkdfExtract(salt, ikm);
   
-  // CEK 및 IV 유도
-  const cekInfo = encoder.encode('Content-Encoding: aes128gcm\0');
-  const ivInfo = encoder.encode('Content-Encoding: nonce\0');
-  const cek = await hkdfExpand(prk, cekInfo, 128);
-  const iv = await hkdfExpand(prk, ivInfo, 96);
+  // CEK(16바이트) 및 IV(12바이트) 유도
+  const cek = await hkdfExpand(prk, encoder.encode('Content-Encoding: aes128gcm\0'), 128);
+  const iv = await hkdfExpand(prk, encoder.encode('Content-Encoding: nonce\0'), 96);
 
   // 4. AES-128-GCM 암호화
   const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
   const plainText = encoder.encode(payload);
   const dataToEncrypt = new Uint8Array(plainText.length + 1);
   dataToEncrypt.set(plainText, 0);
-  dataToEncrypt.set([0x02], plainText.length); // Delimiter
+  dataToEncrypt.set([0x02], plainText.length); // 0x02 is the delimiter for aes128gcm
 
   const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any }, aesKey, dataToEncrypt));
 
-  // 5. 최종 바이너리 헤더 구성
+  // 5. 최종 바이너리 구성 (RFC 8291 Header)
+  // salt(16) | rs(4) | idlen(1) | key(65) | ciphertext
   const result = new Uint8Array(21 + localPublicKey.length + ciphertext.length);
   result.set(salt, 0);
   result.set([0x00, 0x00, 0x10, 0x00], 16); // rs=4096
@@ -280,8 +280,10 @@ export async function addReport(profileId: number | null, type: string, content:
   const { error } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출에 실패했습니다.' }
   try {
-    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    // 하드코딩된 Public Key (환경 변수 이슈 방지)
+    const publicKey = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
     const privateKey = process.env.VAPID_PRIVATE_KEY;
+    
     if (publicKey && privateKey) {
       const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription');
       if (subs && subs.length > 0) {
@@ -298,6 +300,8 @@ export async function addReport(profileId: number | null, type: string, content:
           }
         }));
       }
+    } else {
+      console.error('푸시 알림 실패: VAPID 키가 누락되었습니다.');
     }
   } catch (e: any) {
     console.error('전체 푸시 프로세스 치명적 오류:', e.message);

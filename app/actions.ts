@@ -106,10 +106,84 @@ export async function getUsageHistory(year: number, month: number) {
     .lte('used_at', end)
     .order('used_at', { ascending: true })
 
-  if (error) {
-    console.error('Error fetching history:', error)
-    return []
+    if (error) {
+
+      console.error('Error fetching history:', error)
+
+      return []
+
+    }
+
+  
+
+    return data || []
+
   }
 
-  return data || []
-}
+  
+
+  export async function addParkingCard(userName: string) {
+
+    const { error } = await supabase
+
+      .from('parking_cards')
+
+      .insert({ user_name: userName, remaining_uses: 3 })
+
+  
+
+    if (error) {
+
+      console.error('Error adding card:', error)
+
+      return { success: false, error: '카드 추가 중 오류가 발생했습니다.' }
+
+    }
+
+  
+
+    revalidatePath('/')
+
+    revalidatePath('/manage')
+
+    return { success: true }
+
+  }
+
+  
+
+  export async function deleteParkingCard(id: number) {
+
+    // Option 1: Just delete. If it fails due to FK constraint (history exists), return error message.
+
+    // We'll return a friendly error message if it's tied to history.
+
+    const { error } = await supabase
+
+      .from('parking_cards')
+
+      .delete()
+
+      .eq('id', id)
+
+  
+
+    if (error) {
+
+      console.error('Error deleting card:', error)
+
+      return { success: false, error: '사용 기록이 있는 카드는 삭제할 수 없거나 삭제 중 오류가 발생했습니다.' }
+
+    }
+
+  
+
+    revalidatePath('/')
+
+    revalidatePath('/manage')
+
+    return { success: true }
+
+  }
+
+  

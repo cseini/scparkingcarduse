@@ -57,6 +57,7 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
       if (!result.success) {
         alert(result.error)
       } else {
+        alert('새 카드가 등록되었습니다. ✨')
         setNewUserName('')
         setNewColor('')
       }
@@ -69,14 +70,15 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
   }
 
   const handleDelete = async (id: number, userName: string) => {
-    if (!confirm(`'${userName}' 카드를 삭제하시겠습니까?
-(사용 이력이 있는 경우 삭제되지 않을 수 있습니다)`)) return
+    if (!confirm(`'${userName}' 카드를 삭제하시겠습니까?`)) return
     
     setLoading(true)
     try {
       const result = await deleteParkingCard(id)
       if (!result.success) {
         alert(result.error)
+      } else {
+        alert('카드가 삭제되었습니다.')
       }
     } catch (err) {
       console.error(err)
@@ -105,6 +107,7 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
       if (!result.success) {
         alert(result.error)
       } else {
+        alert('카드 정보가 수정되었습니다. ✅')
         setEditingCardId(null)
       }
     } catch (err) {
@@ -116,7 +119,7 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
   }
 
   const getProfileName = (id: number | null) => {
-    if (!id) return '공용(프로필 없음)'
+    if (!id) return '공용'
     const p = profiles.find(p => p.id === id)
     return p ? p.name : '알 수 없음'
   }
@@ -124,7 +127,7 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
   return (
     <div className="manage-container">
       <div className="manage-section">
-        <h2>새 카드 추가</h2>
+        <h2 style={{ fontSize: '1rem', marginBottom: '1rem', borderBottom: 'none' }}>새 카드 추가</h2>
         {!activeProfileId ? (
           <p className="warning-msg">카드를 추가하려면 상단에서 특정 프로필을 먼저 선택해 주세요.</p>
         ) : (
@@ -135,7 +138,7 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
                   type="text" 
                   value={newUserName} 
                   onChange={(e) => setNewUserName(e.target.value)} 
-                  placeholder="카드 별칭 (예: 신한플래티넘)" 
+                  placeholder="카드 이름 입력" 
                   disabled={loading}
                   className="input-field"
                   style={{ flex: 1 }}
@@ -164,7 +167,7 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
 
       {showColorPopup && (
         <div className="modal-overlay" onClick={() => setShowColorPopup(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '300px' }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>색상 선택</h3>
             <p className="modal-subtitle">중복되지 않는 색상을 선택하세요</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', padding: '1rem' }}>
@@ -201,51 +204,47 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
 
       <div className="manage-section">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <h2 style={{ margin: 0 }}>등록된 카드 목록</h2>
+          <h2 style={{ margin: 0, fontSize: '1rem' }}>등록된 카드 목록</h2>
         </div>
         {cards.length === 0 ? (
-          <p className="empty-msg">이 프로필에 등록된 카드가 없습니다.</p>
+          <p className="empty-msg">등록된 카드가 없습니다.</p>
         ) : (
-          <ul className="card-list">
+          <ul className="card-list" style={{ padding: 0 }}>
             {cards.map(card => (
               <li key={card.id} className="card-list-item">
                 {editingCardId === card.id ? (
-                  <div className="edit-form" style={{ width: '100%', gap: '1rem', padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '0.75rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
-                      <input 
-                        type="text" 
-                        value={editUserName} 
-                        onChange={(e) => setEditUserName(e.target.value)}
-                        className="input-field edit-name"
-                        style={{ flex: 1 }}
-                        placeholder="이름"
-                      />
-                      <button 
-                        type="button" 
-                        onClick={() => setShowEditColorPopup(true)}
-                        style={{ 
-                          width: '40px', 
-                          height: '40px', 
-                          borderRadius: '0.5rem', 
-                          backgroundColor: editColor, 
-                          border: '1px solid #cbd5e1',
-                          cursor: 'pointer'
-                        }}
-                      />
-                    </div>
-
-                    <div className="edit-actions" style={{ marginTop: '0.5rem' }}>
+                  <div className="edit-form">
+                    <input 
+                      type="text" 
+                      value={editUserName} 
+                      onChange={(e) => setEditUserName(e.target.value)}
+                      className="input-field edit-name"
+                      placeholder="이름"
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setShowEditColorPopup(true)}
+                      style={{ 
+                        width: '36px', 
+                        height: '36px', 
+                        borderRadius: '0.4rem', 
+                        backgroundColor: editColor, 
+                        border: '1px solid #cbd5e1',
+                        cursor: 'pointer',
+                        flexShrink: 0
+                      }}
+                    />
+                    <div className="edit-actions">
                       <button onClick={() => handleEditSave(card.id)} disabled={loading} className="save-button">저장</button>
                       <button onClick={handleEditCancel} disabled={loading} className="cancel-button">취소</button>
                     </div>
 
                     {showEditColorPopup && (
                       <div className="modal-overlay" onClick={() => setShowEditColorPopup(false)} style={{ zIndex: 1100 }}>
-                        <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '300px' }}>
+                        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                           <h3>색상 수정</h3>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', padding: '1rem' }}>
                             {PRESET_COLORS.map(color => {
-                              // Can use current card's color
                               const isUsedByOthers = cards.some(c => c.id !== card.id && c.color.toLowerCase() === color.toLowerCase())
                               return (
                                 <button
@@ -279,10 +278,7 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
                   <>
                     <div className="profile-info">
                       <div className="profile-color-dot" style={{ backgroundColor: card.color || '#cbd5e1' }}></div>
-                      <div>
-                        <div className="card-list-name">{card.user_name} <small>({card.remaining_uses}회 남음)</small></div>
-                        {!activeProfileId && <div style={{ fontSize: '0.75rem', color: '#64748b' }}>소유자: {getProfileName(card.profile_id)}</div>}
-                      </div>
+                      <span className="card-list-name">{card.user_name}</span>
                     </div>
                     <div className="card-actions">
                       <button 

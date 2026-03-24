@@ -62,8 +62,6 @@ export default async function Home() {
 
   return (
     <main className="container">
-      <h1>SC제일본점 무료주차 🅿️</h1>
-      
       {isEmpty ? (
         <div style={{ textAlign: 'center', padding: '3rem', background: '#fef3c7', borderRadius: '1rem', color: '#92400e' }}>
           {profiles.length === 0 ? (

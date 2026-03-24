@@ -17,7 +17,7 @@ import {
 } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { toZonedTime } from 'date-fns-tz'
-import { useParkingCard, deleteUsageHistory, checkAutoReset } from './actions'
+import { useParkingCard, deleteUsageHistory, checkAutoReset, getUsageHistory } from './actions'
 
 const TIMEZONE = 'Asia/Seoul'
 
@@ -42,13 +42,32 @@ interface CalendarProps {
   history: UsageRecord[]
 }
 
-export default function Calendar({ cards, history }: CalendarProps) {
+export default function Calendar({ cards, history: initialHistory }: CalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(toZonedTime(new Date(), TIMEZONE))
+  const [history, setHistory] = useState<UsageRecord[]>(initialHistory)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedHistory, setSelectedHistory] = useState<UsageRecord | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Sync history if initialHistory changes (e.g. on profile switch)
+  useEffect(() => {
+    setHistory(initialHistory)
+  }, [initialHistory])
+
+  // Fetch history when currentMonth changes
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (cards.length > 0 && cards[0].profile_id) {
+        const year = currentMonth.getFullYear()
+        const month = currentMonth.getMonth() + 1
+        const data = await getUsageHistory(year, month, cards[0].profile_id)
+        setHistory(data)
+      }
+    }
+    fetchHistory()
+  }, [currentMonth, cards])
 
   // Auto-reset check when viewing calendar
   useEffect(() => {
@@ -76,13 +95,15 @@ export default function Calendar({ cards, history }: CalendarProps) {
   }
 
   const handleDateClick = (day: Date) => {
-    // Prevent opening "add" modal if clicking on a history tag (handled by stopPropagation in tag click)
+    // 현재 월이 아닌 경우 클릭 무시
+    if (!isSameDay(startOfMonth(day), monthStart)) return;
+    
     setSelectedDate(day)
     setIsModalOpen(true)
   }
 
   const handleHistoryClick = (e: React.MouseEvent, record: UsageRecord) => {
-    e.stopPropagation() // Prevent triggering the date cell click
+    e.stopPropagation() 
     setSelectedHistory(record)
     setIsEditModalOpen(true)
   }
@@ -96,6 +117,7 @@ export default function Calendar({ cards, history }: CalendarProps) {
       if (!result.success) {
         alert(result.error)
       } else {
+        alert('사용 기록이 저장되었습니다. 🅿️')
         setIsModalOpen(false)
       }
     } catch (err) {
@@ -109,18 +131,13 @@ export default function Calendar({ cards, history }: CalendarProps) {
   const handleDeleteHistory = async () => {
     if (!selectedHistory || loading) return
     
-    console.log('[Client] 삭제 요청 시작:', selectedHistory.id);
-    // 프리뷰 환경에서 confirm()은 차단될 수 있어 제거하거나 커스텀 UI를 써야 합니다.
-    // 우선 테스트를 위해 confirm 없이 진행하도록 수정합니다.
-
     setLoading(true)
     try {
       const result = await deleteUsageHistory(selectedHistory.id, selectedHistory.card_id)
-      console.log('[Client] 삭제 결과:', result);
-      
       if (!result.success) {
         alert(result.error)
       } else {
+        alert('기록이 삭제되고 횟수가 복구되었습니다.')
         setIsEditModalOpen(false)
         setSelectedHistory(null)
       }
@@ -135,9 +152,9 @@ export default function Calendar({ cards, history }: CalendarProps) {
   return (
     <div className="calendar-container">
       <div className="calendar-header">
-        <button onClick={prevMonth}>&lt;</button>
+        <button onClick={prevMonth} className="nav-btn">&lt;</button>
         <h2>{format(currentMonth, 'yyyy년 MM월', { locale: ko })}</h2>
-        <button onClick={nextMonth}>&gt;</button>
+        <button onClick={nextMonth} className="nav-btn">&gt;</button>
       </div>
 
       <div className="calendar-grid">
@@ -160,7 +177,7 @@ export default function Calendar({ cards, history }: CalendarProps) {
             <div 
               key={day.toISOString()} 
               className={dayClass}
-              onClick={() => handleDateClick(day)}
+              onClick={() => isCurrentMonth && handleDateClick(day)}
             >
               <span className="day-number">{format(day, 'd')}</span>
               <div className="usage-center-container">
@@ -171,7 +188,7 @@ export default function Calendar({ cards, history }: CalendarProps) {
                       backgroundColor: getCardColor(dayHistory[0].card_id),
                       color: '#fff'
                     }}
-                    onClick={(e) => handleHistoryClick(e, dayHistory[0])}
+                    onClick={(e) => isCurrentMonth && handleHistoryClick(e, dayHistory[0])}
                     title="클릭하여 수정/삭제"
                   >
                     {dayHistory[0].user_name}

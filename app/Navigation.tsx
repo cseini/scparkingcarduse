@@ -97,7 +97,12 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
       <header className="header">
         <div className="header-content">
           <Link href="/" className="logo">
-            🅿️ 주차 관리
+            <svg className="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="24" height="24" rx="6" fill="#2563eb"/>
+              <path d="M17 12H13.5V17H10.5V7H14.5C15.8807 7 17 8.11929 17 9.5V12ZM13.5 9.5V11.5H14.5C15.0523 11.5 15.5 11.0523 15.5 10.5C15.5 9.94772 15.0523 9.5 14.5 9.5H13.5Z" fill="white"/>
+              <path opacity="0.3" d="M19 19L5 19" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            <span style={{ fontWeight: 900, color: '#1e293b', fontSize: '1.1rem', letterSpacing: '-0.02em' }}>SC PARKING</span>
           </Link>
           
           <div className="header-actions">

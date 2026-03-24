@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { addReport, saveSubscription } from '../actions'
 import { useRouter } from 'next/navigation'
+import { useToast } from '../Toast'
 
 interface ReportClientProps {
   activeProfileId?: number
@@ -10,6 +11,7 @@ interface ReportClientProps {
 }
 
 export default function ReportClient({ activeProfileId, activeProfileName }: ReportClientProps) {
+  const { showToast } = useToast()
   const [type, setType] = useState('bug')
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
@@ -37,7 +39,10 @@ export default function ReportClient({ activeProfileId, activeProfileName }: Rep
 
     try {
       const permission = await Notification.requestPermission()
-      if (permission !== 'granted') return alert('알림 권한이 거부되었습니다.')
+      if (permission !== 'granted') {
+        showToast('알림 권한이 거부되었습니다.', 'error')
+        return
+      }
 
       const registration = await navigator.serviceWorker.register('/sw.js')
       const sub = await registration.pushManager.subscribe({
@@ -48,11 +53,11 @@ export default function ReportClient({ activeProfileId, activeProfileName }: Rep
       const result = await saveSubscription(activeProfileId || null, sub)
       if (result.success) {
         setIsSubscribed(true)
-        alert('이제 새로운 리포트가 올라오면 알림을 보내드립니다! 🔔')
+        showToast('이제 리포트가 올라오면 알림을 보내드립니다! 🔔', 'success')
       }
     } catch (err) {
       console.error(err)
-      alert('알림 설정 중 오류가 발생했습니다.')
+      showToast('알림 설정 중 오류가 발생했습니다.', 'error')
     }
   }
 
@@ -64,14 +69,14 @@ export default function ReportClient({ activeProfileId, activeProfileName }: Rep
     try {
       const result = await addReport(activeProfileId || null, type, content.trim())
       if (result.success) {
-        alert('소중한 의견 감사합니다! 성공적으로 제출되었습니다. ✨')
+        showToast('소중한 의견 감사합니다! 성공적으로 제출되었습니다. ✨', 'success')
         router.push('/')
       } else {
-        alert(result.error)
+        showToast(result.error || '제출 실패', 'error')
       }
     } catch (err) {
       console.error(err)
-      alert('오류가 발생했습니다. 다시 시도해 주세요.')
+      showToast('오류가 발생했습니다. 다시 시도해 주세요.', 'error')
     } finally {
       setLoading(false)
     }

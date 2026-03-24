@@ -18,6 +18,7 @@ import {
 import { ko } from 'date-fns/locale'
 import { toZonedTime } from 'date-fns-tz'
 import { useParkingCard, deleteUsageHistory, checkAutoReset, getUsageHistory } from './actions'
+import { useToast } from './Toast'
 
 const TIMEZONE = 'Asia/Seoul'
 
@@ -50,6 +51,8 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedHistory, setSelectedHistory] = useState<UsageRecord | null>(null)
   const [loading, setLoading] = useState(false)
+
+  const { showToast } = useToast()
 
   // Sync history if initialHistory changes (e.g. on profile switch)
   useEffect(() => {
@@ -115,14 +118,14 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
     try {
       const result = await useParkingCard(cardId, selectedDate.toISOString())
       if (!result.success) {
-        alert(result.error)
+        showToast(result.error || '오류가 발생했습니다.', 'error')
       } else {
-        alert('사용 기록이 저장되었습니다. 🅿️')
+        showToast('사용 기록이 저장되었습니다. ✨', 'success')
         setIsModalOpen(false)
       }
     } catch (err) {
       console.error(err)
-      alert('오류가 발생했습니다.')
+      showToast('오류가 발생했습니다.', 'error')
     } finally {
       setLoading(false)
     }
@@ -135,15 +138,15 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
     try {
       const result = await deleteUsageHistory(selectedHistory.id, selectedHistory.card_id)
       if (!result.success) {
-        alert(result.error)
+        showToast(result.error || '삭제 실패', 'error')
       } else {
-        alert('기록이 삭제되고 횟수가 복구되었습니다.')
+        showToast('기록이 삭제되었습니다.', 'success')
         setIsEditModalOpen(false)
         setSelectedHistory(null)
       }
     } catch (err) {
       console.error('[Client] 삭제 중 에러 발생:', err)
-      alert('오류가 발생했습니다.')
+      showToast('오류가 발생했습니다.', 'error')
     } finally {
       setLoading(false)
     }

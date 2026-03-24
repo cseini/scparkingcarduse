@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { addParkingCard, deleteParkingCard, updateParkingCard, checkAutoReset } from '../actions'
+import { useToast } from '../Toast'
 
 interface Profile {
   id: number
@@ -28,6 +29,7 @@ const PRESET_COLORS = [
 ]
 
 export default function ManageClient({ cards, profiles, activeProfileId }: ManageClientProps) {
+  const { showToast } = useToast()
   const [newUserName, setNewUserName] = useState('')
   const [newColor, setNewColor] = useState('')
   const [showColorPopup, setShowColorPopup] = useState(false)
@@ -55,15 +57,15 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
     try {
       const result = await addParkingCard(newUserName.trim(), activeProfileId, newColor)
       if (!result.success) {
-        alert(result.error)
+        showToast(result.error || '추가 실패', 'error')
       } else {
-        alert('새 카드가 등록되었습니다. ✨')
+        showToast('새 카드가 등록되었습니다. ✨', 'success')
         setNewUserName('')
         setNewColor('')
       }
     } catch (err) {
       console.error(err)
-      alert('오류가 발생했습니다.')
+      showToast('오류가 발생했습니다.', 'error')
     } finally {
       setLoading(false)
     }
@@ -76,13 +78,13 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
     try {
       const result = await deleteParkingCard(id)
       if (!result.success) {
-        alert(result.error)
+        showToast(result.error || '삭제 실패', 'error')
       } else {
-        alert('카드가 삭제되었습니다.')
+        showToast('카드가 삭제되었습니다.', 'success')
       }
     } catch (err) {
       console.error(err)
-      alert('오류가 발생했습니다.')
+      showToast('오류가 발생했습니다.', 'error')
     } finally {
       setLoading(false)
     }
@@ -105,14 +107,14 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
     try {
       const result = await updateParkingCard(id, editUserName.trim(), activeProfileId, editColor)
       if (!result.success) {
-        alert(result.error)
+        showToast(result.error || '수정 실패', 'error')
       } else {
-        alert('카드 정보가 수정되었습니다. ✅')
+        showToast('카드 정보가 수정되었습니다. ✅', 'success')
         setEditingCardId(null)
       }
     } catch (err) {
       console.error(err)
-      alert('오류가 발생했습니다.')
+      showToast('오류가 발생했습니다.', 'error')
     } finally {
       setLoading(false)
     }

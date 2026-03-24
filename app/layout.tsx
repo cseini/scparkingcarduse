@@ -4,6 +4,7 @@ import "./globals.css";
 import Navigation from "./Navigation";
 import { getProfiles } from "./actions";
 import { cookies } from "next/headers";
+import { ToastProvider } from "./Toast";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -24,8 +25,10 @@ export default async function RootLayout({
   return (
     <html lang="ko">
       <body className={inter.className}>
-        <Navigation profiles={profiles} initialProfileId={selectedProfileId} />
-        {children}
+        <ToastProvider>
+          <Navigation profiles={profiles} initialProfileId={selectedProfileId} />
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );

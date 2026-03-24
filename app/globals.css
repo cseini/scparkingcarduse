@@ -313,7 +313,37 @@ body {
 .button-remaining { font-size: 0.65rem; color: #64748b; }
 
 /* History Action */
-.delete-history-btn { background: white; color: #ef4444; border: 2px solid #ef4444; padding: 0.75rem; border-radius: 0.75rem; font-weight: 700; width: 100%; cursor: pointer; }
+.delete-history-btn { background: white; color: #ef4444; border: 1px solid #ef4444; padding: 0.75rem; border-radius: 0.75rem; font-weight: 700; width: 100%; cursor: pointer; }
+
+/* Toast Styles */
+.toast-container {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: #1e293b;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 2rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+  min-width: 200px;
+  text-align: center;
+  animation: toastUp 0.3s ease-out;
+}
+
+.toast-container.success { background: #10b981; }
+.toast-container.error { background: #ef4444; }
+
+.toast-message {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+@keyframes toastUp {
+  from { bottom: 0; opacity: 0; }
+  to { bottom: 2rem; opacity: 1; }
+}
 
 /* Long screen adjustments */
 @media (min-height: 800px) {

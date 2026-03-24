@@ -59,6 +59,18 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
     setIsPinModalOpen(true)
   }
 
+  // Auto-submit when 4 digits are entered
+  useEffect(() => {
+    if (pinInput.length === 4 && !pinLoading) {
+      // Small delay to let the UI update and show the 4th dot/digit
+      const timer = setTimeout(() => {
+        const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+        handlePinSubmit(fakeEvent);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [pinInput, pinLoading]);
+
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!targetProfile || pinInput.length !== 4 || pinLoading) return

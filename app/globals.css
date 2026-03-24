@@ -90,21 +90,26 @@ h1 {
 
 /* Dashboard Summary Cards */
 .card-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 0.75rem;
   margin-bottom: 2rem;
 }
 
-@media (max-width: 640px) {
+/* Limit to maximum 4 columns on larger screens */
+@media (min-width: 800px) {
   .card-grid {
-    flex-direction: column;
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .card-grid {
+    grid-template-columns: 1fr;
   }
 }
 
 .parking-card {
-  flex: 1 1 0;
-  min-width: 140px;
   background: var(--card-bg);
   border-radius: 1rem;
   padding: 1rem;
@@ -114,7 +119,9 @@ h1 {
   align-items: center;
   text-align: center;
   border: 2px solid transparent;
+  transition: transform 0.2s ease;
 }
+
 
 .user-name {
   font-size: 1rem;

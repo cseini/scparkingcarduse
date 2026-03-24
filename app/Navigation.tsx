@@ -79,16 +79,22 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
       const result = await checkProfilePin(targetProfile.id, pinInput)
       if (result.success) {
         const idStr = targetProfile.id.toString()
-        setSelectedProfileId(idStr)
         
+        // 클라이언트 사이드 쿠키 즉시 설정
+        Cookies.set('selected_profile_id', idStr, { expires: 365, path: '/' })
+        
+        // 서버 사이드 쿠키 설정 액션 호출
         await setProfileCookieAction(idStr)
         
-        // 서버 데이터를 강제로 새로고침하여 다른 페이지 이동 시에도 반영되게 함
-        router.refresh()
+        // 로컬 상태 업데이트
+        setSelectedProfileId(idStr)
         
         setIsPinModalOpen(false)
         setIsProfileModalOpen(false)
         setPinInput('')
+
+        // router.refresh() 대신 확실한 전체 새로고침 사용
+        window.location.reload()
       } else {
         setPinError(result.error || '핀코드가 일치하지 않습니다.')
         setPinInput('')

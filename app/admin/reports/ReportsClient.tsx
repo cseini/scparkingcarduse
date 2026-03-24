@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import { ko } from 'date-fns/locale/ko'
 import { useToast } from '../../Toast'
 import Cookies from 'js-cookie'
+import { useRouter } from 'next/navigation'
 
 interface Report {
   id: number
@@ -20,6 +21,12 @@ export default function ReportsClient({ initialReports }: { initialReports: any[
   const [reports, setReports] = useState<Report[]>(initialReports)
   const [loading, setLoading] = useState(false)
   const { showToast } = useToast()
+  const router = useRouter()
+
+  // 서버에서 props가 변경될 때마다(예: router.refresh() 호출 시) 로컬 상태 동기화
+  useEffect(() => {
+    setReports(initialReports)
+  }, [initialReports])
 
   // 어드민 체크 (간이 보안: 쿠키에 저장된 프로필 ID의 이름을 Navigation에서 이미 검증하지만 여기서도 확인 가능하면 좋습니다.)
   // 하지만 여기서는 리스트 렌더링에 집중하겠습니다.
@@ -28,14 +35,22 @@ export default function ReportsClient({ initialReports }: { initialReports: any[
     if (!confirm('이 리포트를 삭제하시겠습니까?')) return
     setLoading(true)
     try {
+      // 1. 낙관적 업데이트: UI에서 먼저 제거
+      setReports(reports.filter(r => r.id !== id))
+      
+      // 2. 서버에 삭제 요청
       const result = await deleteReport(id)
       if (result.success) {
         showToast('리포트가 삭제되었습니다.', 'success')
-        setReports(reports.filter(r => r.id !== id))
+        // 3. Next.js 라우터 캐시 무효화 및 새로운 데이터 페칭 트리거
+        router.refresh()
       } else {
+        // 롤백: 삭제 실패 시 원래 상태로 복구
+        setReports(initialReports)
         showToast(result.error || '삭제 실패', 'error')
       }
     } catch (err) {
+      setReports(initialReports) // 에러 시 롤백
       showToast('오류가 발생했습니다.', 'error')
     } finally {
       setLoading(false)

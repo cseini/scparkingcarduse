@@ -12,9 +12,12 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@google-cloud/vertexai": "^1.10.2",
+    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.100.0",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
+    "dotenv": "^17.3.1",
     "js-cookie": "^3.0.5",
     "next": "16.2.1",
     "react": "19.2.4",

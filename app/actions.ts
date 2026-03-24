@@ -203,7 +203,14 @@ export async function deleteProfile(id: number) {
 export async function setProfileCookieAction(id: string) {
   const { cookies } = await import('next/headers')
   const cookieStore = await cookies()
-  cookieStore.set('selected_profile_id', id, { maxAge: 60 * 60 * 24 * 365, path: '/' })
+  
+  // 쿠키 설정을 프리뷰 환경에 맞게 보완
+  cookieStore.set('selected_profile_id', id, { 
+    maxAge: 60 * 60 * 24 * 365, 
+    path: '/',
+    sameSite: 'lax', // 클라우드 환경에서 쿠키 유실 방지
+    secure: process.env.NODE_ENV === 'production' // 개발 환경에서는 false로 작동할 수 있도록 유연하게 설정
+  })
   
   // 모든 페이지의 데이터를 서버측에서 다시 가져오도록 설정
   revalidatePath('/', 'layout')

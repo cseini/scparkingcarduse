@@ -55,7 +55,7 @@ export async function useParkingCard(id: number, date?: string) {
       user_name: card.user_name,
       used_at: usageDate.toISOString()
     })
-  if (historyError) return { success: false, error: `저장 실패: \${historyError.message}` }
+  if (historyError) return { success: false, error: `저장 실패: ${historyError.message}` }
   revalidatePath('/')
   return { success: true }
 }
@@ -168,7 +168,7 @@ export async function deleteReport(id: number) {
 }
 
 // ---------------------------------------------------------
-// 웹푸시 암호화 및 전송 로직 (Edge Runtime 호환)
+// 웹푸시 암호화 및 전송 로직 (Edge Runtime 호환 직접 구현)
 // ---------------------------------------------------------
 
 function base64UrlToUint8Array(base64Url: string) {
@@ -177,101 +177,79 @@ function base64UrlToUint8Array(base64Url: string) {
   return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
 }
 
-function uint8ArrayToBase64Url(buf: Uint8Array) {
-  return btoa(String.fromCharCode(...buf)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function uint8ArrayToBase64Url(buf: any) {
+  const uint8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  return btoa(String.fromCharCode(...Array.from(uint8))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 async function encryptPayload(subscription: any, payload: string) {
   const p256dh = base64UrlToUint8Array(subscription.keys.p256dh);
   const auth = base64UrlToUint8Array(subscription.keys.auth);
-  
-  // 1. 임시 키 생성
   const localKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   const localPublicKey = await crypto.subtle.exportKey('raw', localKeys.publicKey);
-  
-  // 2. 공유 비밀 생성
   const remoteKey = await crypto.subtle.importKey('raw', p256dh, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
   const sharedSecret = await crypto.subtle.deriveBits({ name: 'ECDH', public: remoteKey }, localKeys.privateKey, 256);
-  
-  // 3. 솔트 생성
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  
-  // 4. 정보(Info) 구성 (HKDF)
   const encoder = new TextEncoder();
-  const info = new Uint8Array([
-    ...encoder.encode('WebPush: info'), 0x00,
-    ...p256dh,
-    ...localPublicKey,
-  ]);
-
-  // 5. IKM 생성
-  const prkAuth = await crypto.subtle.importKey('raw', auth, { name: 'HKDF' }, false, ['deriveBits']);
-  const ikm = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: encoder.encode('Content-Encoding: auth\0') }, prkAuth, 256);
-
-  // 6. PRK 생성
-  const prkKey = await crypto.subtle.importKey('raw', ikm, { name: 'HKDF' }, false, ['deriveBits']);
-  
-  // 7. CEK 및 IV 생성
-  const cekBits = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info: encoder.encode('Content-Encoding: aes128gcm\0') }, prkKey, 128);
-  const ivBits = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info: encoder.encode('Content-Encoding: nonce\0') }, prkKey, 96);
-  
-  const cek = await crypto.subtle.importKey('raw', cekBits, { name: 'AES-GCM' }, false, ['encrypt']);
-  const iv = ivBits;
-
-  // 8. 본문 암호화 (패딩 포함)
+  const hkdf = async (s: Uint8Array, ikm: Uint8Array, info: Uint8Array, len: number) => {
+    const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: s, info }, key, len));
+  };
+  const ikm = await hkdf(new Uint8Array(0), auth, encoder.encode('Content-Encoding: auth\0'), 256);
+  const prk = await hkdf(ikm, new Uint8Array(sharedSecret), encoder.encode(`WebPush: info\0${uint8ArrayToBase64Url(p256dh)}${uint8ArrayToBase64Url(new Uint8Array(localPublicKey))}`), 256);
+  const cek = await hkdf(salt, prk, encoder.encode('Content-Encoding: aes128gcm\0'), 128);
+  const iv = await hkdf(salt, prk, encoder.encode('Content-Encoding: nonce\0'), 96);
   const plainText = encoder.encode(payload);
-  const dataToEncrypt = new Uint8Array(plainText.length + 2);
-  dataToEncrypt.set(plainText, 0); // 본문
-  dataToEncrypt.set([0x02, 0x00], plainText.length); // 종료 마커
-
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cek, dataToEncrypt);
-
-  // 9. 최종 바이너리 페이로드 구성 (Header + Ciphertext)
+  const dataToEncrypt = new Uint8Array(plainText.length + 1);
+  dataToEncrypt.set(plainText, 0);
+  dataToEncrypt.set([0x02], plainText.length);
+  const aesKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, dataToEncrypt);
   const combined = new Uint8Array(21 + localPublicKey.byteLength + ciphertext.byteLength);
-  combined.set(salt, 0); // Salt (16)
-  combined.set([0x00, 0x00, 0x10, 0x00], 16); // Record Size (4)
-  combined.set([localPublicKey.byteLength], 20); // ID Length (1)
-  combined.set(new Uint8Array(localPublicKey), 21); // Public Key
-  combined.set(new Uint8Array(ciphertext), 21 + localPublicKey.byteLength); // Encrypted Data
-
+  combined.set(salt, 0);
+  combined.set([0x00, 0x00, 0x10, 0x00], 16);
+  combined.set([localPublicKey.byteLength], 20);
+  combined.set(new Uint8Array(localPublicKey), 21);
+  combined.set(new Uint8Array(ciphertext), 21 + localPublicKey.byteLength);
   return combined;
 }
 
 async function sendEdgePush(subscription: any, payload: string, publicKey: string, privateKey: string) {
   const endpoint = subscription.endpoint;
   const origin = new URL(endpoint).origin;
-  
-  // JWT 생성
+  const rawPublic = base64UrlToUint8Array(publicKey);
+  const rawPrivate = base64UrlToUint8Array(privateKey);
+  const jwk = {
+    kty: 'EC', crv: 'P-256',
+    x: uint8ArrayToBase64Url(rawPublic.slice(1, 33)),
+    y: uint8ArrayToBase64Url(rawPublic.slice(33, 65)),
+    d: uint8ArrayToBase64Url(rawPrivate),
+    ext: true
+  };
+  const key = await crypto.subtle.importKey('jwk', jwk as any, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
   const header = { alg: 'ES256', typ: 'JWT' };
   const now = Math.floor(Date.now() / 1000);
   const body = { aud: origin, exp: now + 86400, sub: 'mailto:admin@scparking.pages.dev' };
   const encoder = new TextEncoder();
   const tokenHeader = uint8ArrayToBase64Url(encoder.encode(JSON.stringify(header)));
   const tokenBody = uint8ArrayToBase64Url(encoder.encode(JSON.stringify(body)));
-  const unsignedToken = `\${tokenHeader}.\${tokenBody}`;
-
-  const rawPrivate = base64UrlToUint8Array(privateKey);
-  const key = await crypto.subtle.importKey('pkcs8', rawPrivate, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const unsignedToken = `${tokenHeader}.${tokenBody}`;
   const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, encoder.encode(unsignedToken));
-  const signedToken = `\${unsignedToken}.\${uint8ArrayToBase64Url(new Uint8Array(signature))}`;
-
-  // 페이로드 암호화
+  const signedToken = `${unsignedToken}.${uint8ArrayToBase64Url(new Uint8Array(signature))}`;
   const encryptedPayload = await encryptPayload(subscription, payload);
-
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'Authorization': `vapid t=\${signedToken}, k=\${publicKey}`,
+      'Authorization': `vapid t=${signedToken}, k=${publicKey}`,
       'TTL': '86400',
       'Content-Type': 'application/octet-stream',
       'Content-Encoding': 'aes128gcm'
     },
     body: encryptedPayload
   });
-
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Push server error (\${response.status}): \${errorText}`);
+    throw new Error(`Push server error (${response.status}): ${errorText}`);
   }
   return response;
 }
@@ -279,7 +257,6 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
 export async function addReport(profileId: number | null, type: string, content: string) {
   const { error } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출에 실패했습니다.' }
-
   try {
     const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
     const privateKey = process.env.VAPID_PRIVATE_KEY;

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { addReport } from '../actions'
+import { useState, useEffect } from 'react'
+import { addReport, saveSubscription } from '../actions'
 import { useRouter } from 'next/navigation'
 
 interface ReportClientProps {
@@ -13,7 +13,48 @@ export default function ReportClient({ activeProfileId, activeProfileName }: Rep
   const [type, setType] = useState('bug')
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
+  const [isSubscribed, setIsSubscribed] = useState(false)
   const router = useRouter()
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(registration => {
+        registration.pushManager.getSubscription().then(sub => {
+          if (sub) setIsSubscribed(true)
+        })
+      })
+    }
+  }, [])
+
+  const handleSubscribe = async () => {
+    if (!('serviceWorker' in navigator)) return alert('이 브라우저는 알림을 지원하지 않습니다.')
+    
+    // @ts-ignore
+    const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+    if (!isStandalone && /iPhone|iPad|iPod/.test(navigator.userAgent)) {
+      return alert('아이폰은 "하단 공유 버튼 > 홈 화면에 추가"를 한 뒤 실행해야 알림을 받을 수 있습니다.')
+    }
+
+    try {
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') return alert('알림 권한이 거부되었습니다.')
+
+      const registration = await navigator.serviceWorker.register('/sw.js')
+      const sub = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: 'BNEs4hdEfJBGfV8BezYU1aP1AlW7PBROBeiVC9g6Zt3xWnE6cjhPbb7cgHjRppItIIX-Dv_aQUDCJI1gZSgP0c8'
+      })
+
+      const result = await saveSubscription(activeProfileId || null, sub)
+      if (result.success) {
+        setIsSubscribed(true)
+        alert('이제 새로운 리포트가 올라오면 알림을 보내드립니다! 🔔')
+      }
+    } catch (err) {
+      console.error(err)
+      alert('알림 설정 중 오류가 발생했습니다.')
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,6 +79,37 @@ export default function ReportClient({ activeProfileId, activeProfileName }: Rep
 
   return (
     <div className="manage-section">
+      {/* 관리자('세인')에게만 알림 설정 UI 노출 */}
+      {activeProfileName === '세인' && (
+        <div style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px dashed #cbd5e1' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h4 style={{ fontSize: '0.9rem', margin: 0, color: '#334155' }}>실시간 알림 설정 🔔</h4>
+              <p style={{ fontSize: '0.7rem', color: '#64748b', margin: '0.25rem 0 0 0' }}>
+                {isSubscribed ? '알림 수신 중입니다.' : '리포트 알림을 받으시겠습니까?'}
+              </p>
+            </div>
+            {!isSubscribed && (
+              <button 
+                onClick={handleSubscribe}
+                style={{
+                  padding: '0.4rem 0.8rem',
+                  fontSize: '0.75rem',
+                  background: '#2563eb',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.4rem',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                알림 켜기
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <label style={{ fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>작성자</label>

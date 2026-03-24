@@ -1,0 +1,16 @@
+{
+  "name": "SC 주차 관리",
+  "short_name": "SC주차",
+  "description": "SC 제일은행 본점 무료주차 관리",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/next.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}

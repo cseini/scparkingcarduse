@@ -23,27 +23,23 @@ interface UsageRecord {
   card_id: number
   user_name: string
   used_at: string
+  parking_cards?: { profile_id: number | null }
 }
 
 interface ParkingCardData {
   id: number
   user_name: string
   remaining_uses: number
-}
-
-interface Profile {
-  id: number
-  name: string
+  profile_id: number | null
   color: string
 }
 
 interface CalendarProps {
   cards: ParkingCardData[]
   history: UsageRecord[]
-  profiles: Profile[]
 }
 
-export default function Calendar({ cards, history, profiles }: CalendarProps) {
+export default function Calendar({ cards, history }: CalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -64,9 +60,9 @@ export default function Calendar({ cards, history, profiles }: CalendarProps) {
   const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1))
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
 
-  const getProfileColor = (name: string) => {
-    const profile = profiles.find((p) => p.name === name)
-    return profile?.color || '#cbd5e1'
+  const getCardColor = (cardId: number) => {
+    const card = cards.find(c => c.id === cardId)
+    return card?.color || '#cbd5e1'
   }
 
   const handleDateClick = (day: Date) => {
@@ -155,7 +151,7 @@ export default function Calendar({ cards, history, profiles }: CalendarProps) {
               <span className="day-number">{format(day, 'd')}</span>
               <div className="usage-indicators">
                 {dayHistory.map((h) => {
-                  const color = getProfileColor(h.user_name)
+                  const color = getCardColor(h.card_id)
                   return (
                     <div 
                       key={h.id} 
@@ -182,7 +178,7 @@ export default function Calendar({ cards, history, profiles }: CalendarProps) {
             <p className="modal-subtitle">기록할 카드를 선택하세요</p>
             <div className="modal-buttons">
               {cards.map((card) => {
-                const color = getProfileColor(card.user_name)
+                const color = card.color || '#cbd5e1'
                 return (
                   <button 
                     key={card.id} 

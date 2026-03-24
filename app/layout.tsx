@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Navigation from "./Navigation";
+import { getProfiles } from "./actions";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -10,15 +11,17 @@ export const metadata: Metadata = {
   description: "SC 제일은행 플래티넘 카드 무료 주차 횟수 관리 앱",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const profiles = await getProfiles();
+
   return (
     <html lang="ko">
       <body className={inter.className}>
-        <Navigation />
+        <Navigation profiles={profiles} />
         {children}
       </body>
     </html>

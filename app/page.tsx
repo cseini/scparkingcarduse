@@ -1,15 +1,22 @@
 import { supabase } from '@/lib/supabaseClient'
 import Calendar from './Calendar'
-import { getUsageHistory, getProfiles } from './actions'
+import { getUsageHistory } from './actions'
+import { cookies } from 'next/headers'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
-async function getParkingCards() {
-  const { data, error } = await supabase
+async function getParkingCards(profileId?: number) {
+  let query = supabase
     .from('parking_cards')
     .select('*')
     .order('id', { ascending: true })
+
+  if (profileId) {
+    query = query.eq('profile_id', profileId)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     console.error('Error fetching parking cards:', error)
@@ -20,16 +27,14 @@ async function getParkingCards() {
 }
 
 export default async function Home() {
-  const now = new Date()
-  const cards = await getParkingCards()
-  const profiles = await getProfiles()
-  const history = await getUsageHistory(now.getFullYear(), now.getMonth() + 1)
-  const isEmpty = cards.length === 0
+  const cookieStore = await cookies()
+  const profileCookie = cookieStore.get('selected_profile_id')?.value
+  const profileId = profileCookie && profileCookie !== 'all' ? Number(profileCookie) : undefined
 
-  const getProfileColor = (name: string) => {
-    const profile = profiles.find((p) => p.name === name)
-    return profile?.color || '#cbd5e1'
-  }
+  const now = new Date()
+  const cards = await getParkingCards(profileId)
+  const history = await getUsageHistory(now.getFullYear(), now.getMonth() + 1, profileId)
+  const isEmpty = cards.length === 0
 
   return (
     <main className="container">
@@ -37,14 +42,14 @@ export default async function Home() {
       
       {isEmpty ? (
         <div style={{ textAlign: 'center', padding: '3rem', background: '#fef3c7', borderRadius: '1rem', color: '#92400e' }}>
-          <p>카드 데이터가 존재하지 않습니다.</p>
-          <p>오른쪽 상단 메뉴의 [카드 관리]에서 새 카드를 등록해 주세요.</p>
+          <p>선택된 프로필에 카드가 존재하지 않습니다.</p>
+          <p>오른쪽 상단 메뉴의 [카드 관리]에서 카드를 등록해 주세요.</p>
         </div>
       ) : (
         <>
           <div className="card-grid">
             {cards.map((card) => {
-              const color = getProfileColor(card.user_name)
+              const color = card.color || '#cbd5e1'
               return (
                 <div 
                   key={card.id} 
@@ -59,9 +64,10 @@ export default async function Home() {
             })}
           </div>
 
-          <Calendar cards={cards} history={history} profiles={profiles} />
+          <Calendar cards={cards} history={history} />
         </>
       )}
     </main>
   )
 }
+

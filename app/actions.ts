@@ -92,29 +92,36 @@ export async function initializeCards() {
   return { success: true }
 }
 
-export async function getUsageHistory(year: number, month: number) {
+export async function getUsageHistory(year: number, month: number, profileId?: number) {
   const start = startOfMonth(new Date(year, month - 1)).toISOString()
   const end = endOfMonth(new Date(year, month - 1)).toISOString()
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('parking_usage_history')
-    .select('*')
+    .select('*, parking_cards(profile_id)')
     .gte('used_at', start)
     .lte('used_at', end)
     .order('used_at', { ascending: true })
+
+  const { data, error } = await query
 
   if (error) {
     console.error('Error fetching history:', error)
     return []
   }
 
-  return data || []
+  let filteredData = data || []
+  if (profileId) {
+    filteredData = filteredData.filter(h => h.parking_cards?.profile_id === profileId)
+  }
+
+  return filteredData
 }
 
-export async function addParkingCard(userName: string) {
+export async function addParkingCard(userName: string, profileId: number | null, color: string) {
   const { error } = await supabase
     .from('parking_cards')
-    .insert({ user_name: userName, remaining_uses: 3 })
+    .insert({ user_name: userName, remaining_uses: 3, profile_id: profileId, color })
 
   if (error) {
     console.error('Error adding card:', error)
@@ -142,10 +149,10 @@ export async function deleteParkingCard(id: number) {
   return { success: true }
 }
 
-export async function updateParkingCard(id: number, userName: string, remainingUses: number) {
+export async function updateParkingCard(id: number, userName: string, remainingUses: number, profileId: number | null, color: string) {
   const { error } = await supabase
     .from('parking_cards')
-    .update({ user_name: userName, remaining_uses: remainingUses })
+    .update({ user_name: userName, remaining_uses: remainingUses, profile_id: profileId, color })
     .eq('id', id)
 
   if (error) {
@@ -207,8 +214,8 @@ export async function getProfiles() {
   return data || []
 }
 
-export async function addProfile(name: string, color: string) {
-  const { error } = await supabase.from('profiles').insert({ name, color })
+export async function addProfile(name: string) {
+  const { error } = await supabase.from('profiles').insert({ name })
   if (error) {
     console.error('Error adding profile:', error)
     return { success: false, error: '프로필 추가 중 오류가 발생했습니다.' }
@@ -219,8 +226,8 @@ export async function addProfile(name: string, color: string) {
   return { success: true }
 }
 
-export async function updateProfile(id: number, name: string, color: string) {
-  const { error } = await supabase.from('profiles').update({ name, color }).eq('id', id)
+export async function updateProfile(id: number, name: string) {
+  const { error } = await supabase.from('profiles').update({ name }).eq('id', id)
   if (error) {
     console.error('Error updating profile:', error)
     return { success: false, error: '프로필 수정 중 오류가 발생했습니다.' }

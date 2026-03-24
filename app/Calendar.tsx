@@ -153,12 +153,34 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
   }
 
   return (
-    <div className="calendar-container">
-      <div className="calendar-header">
-        <button onClick={prevMonth} className="nav-btn">&lt;</button>
-        <h2>{format(currentMonth, 'yyyy년 MM월', { locale: ko })}</h2>
-        <button onClick={nextMonth} className="nav-btn">&gt;</button>
+    <>
+      <div className="card-grid">
+        {cards.map((card) => {
+          const color = card.color || '#cbd5e1'
+          // 현재 history(선택된 월의 이력)에서 해당 카드의 사용 횟수 계산
+          const usedCount = history.filter(h => h.card_id === card.id).length
+          const remaining = Math.max(0, 3 - usedCount)
+          
+          return (
+            <div 
+              key={card.id} 
+              className="parking-card"
+              style={{ borderColor: color, backgroundColor: `${color}10` }}
+            >
+              <h3 className="user-name" style={{ color }}>{card.user_name}</h3>
+              <div className="remaining" style={{ color }}>{remaining}</div>
+              <div className="remaining-label">회 남음</div>
+            </div>
+          )
+        })}
       </div>
+
+      <div className="calendar-container">
+        <div className="calendar-header">
+          <button onClick={prevMonth} className="nav-btn">&lt;</button>
+          <h2>{format(currentMonth, 'yyyy년 MM월', { locale: ko })}</h2>
+          <button onClick={nextMonth} className="nav-btn">&gt;</button>
+        </div>
 
       <div className="calendar-grid">
         {['일', '월', '화', '수', '목', '금', '토'].map((day, index) => (

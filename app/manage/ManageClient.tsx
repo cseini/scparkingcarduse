@@ -41,17 +41,31 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
   const [editColor, setEditColor] = useState('')
   const [showEditColorPopup, setShowEditColorPopup] = useState(false)
 
+  const usedColors = cards.map(c => c.color.toLowerCase())
+
+  // Set default color to first available preset color
+  useEffect(() => {
+    if (!newColor || usedColors.includes(newColor.toLowerCase())) {
+      const firstAvailable = PRESET_COLORS.find(color => !usedColors.includes(color.toLowerCase()))
+      if (firstAvailable) {
+        setNewColor(firstAvailable)
+      } else if (!newColor) {
+        // All presets used, fallback to first preset if nothing selected
+        setNewColor(PRESET_COLORS[0])
+      }
+    }
+  }, [cards, newColor, usedColors])
+
   useEffect(() => {
     if (activeProfileId) {
       checkAutoReset(activeProfileId)
     }
   }, [activeProfileId])
 
-  const usedColors = cards.map(c => c.color.toLowerCase())
-
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newUserName.trim() || !newColor || loading || !activeProfileId) return
+    // newColor는 useEffect에서 항상 유효한 값을 유지하므로 빈값 체크 제외
+    if (!newUserName.trim() || loading || !activeProfileId) return
     
     setLoading(true)
     try {
@@ -61,7 +75,7 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
       } else {
         showToast('새 카드가 등록되었습니다. ✨', 'success')
         setNewUserName('')
-        setNewColor('')
+        // 색상은 useEffect에서 자동으로 다음 순서로 바뀜
       }
     } catch (err) {
       console.error(err)
@@ -158,7 +172,7 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
                   }}
                   title="색상 선택"
                 />
-                <button type="submit" disabled={loading || !newUserName.trim() || !newColor} className="add-button">
+                <button type="submit" disabled={loading || !newUserName.trim()} className="add-button">
                   추가
                 </button>
               </div>

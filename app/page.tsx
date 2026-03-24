@@ -71,26 +71,7 @@ export default async function Home() {
           )}
         </div>
       ) : (
-        <>
-          <div className="card-grid">
-            {cards.map((card) => {
-              const color = card.color || '#cbd5e1'
-              return (
-                <div 
-                  key={card.id} 
-                  className="parking-card"
-                  style={{ borderColor: color, backgroundColor: `${color}10` }}
-                >
-                  <h3 className="user-name" style={{ color }}>{card.user_name}</h3>
-                  <div className="remaining" style={{ color }}>{card.remaining_uses}</div>
-                  <div className="remaining-label">회 남음</div>
-                </div>
-              )
-            })}
-          </div>
-
-          <Calendar cards={cards} history={history} />
-        </>
+        <Calendar cards={cards} history={history} />
       )}
     </main>
   )

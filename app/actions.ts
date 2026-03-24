@@ -251,12 +251,21 @@ export async function deleteReport(id: number) {
   return { success: true }
 }
 
-// Edge Runtime 호환을 위한 VAPID 직접 구현 (라이브러리 제거)
+// Edge Runtime 호환을 위해 'web-push' 라이브러리를 완전히 배제하고
+// Web Crypto API를 사용하여 VAPID 푸시 전송을 구현합니다.
 async function sendEdgePush(subscription: any, payload: string, publicKey: string, privateKey: string) {
   const endpoint = subscription.endpoint;
   const origin = new URL(endpoint).origin;
   
-  // VAPID JWT 생성 (Web Crypto API 사용)
+  // Base64Url 인코딩 유틸리티
+  const base64Url = (buf: ArrayBuffer) => {
+    return btoa(String.fromCharCode(...new Uint8Array(buf)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+  };
+
+  // JWT 헤더 및 페이로드
   const header = { alg: 'ES256', typ: 'JWT' };
   const now = Math.floor(Date.now() / 1000);
   const body = {
@@ -265,32 +274,34 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
     sub: 'mailto:admin@scparking.pages.dev'
   };
 
-  const base64Url = (str: string) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  const tokenHeader = base64Url(JSON.stringify(header));
-  const tokenBody = base64Url(JSON.stringify(body));
+  const encoder = new TextEncoder();
+  const tokenHeader = base64Url(encoder.encode(JSON.stringify(header)));
+  const tokenBody = base64Url(encoder.encode(JSON.stringify(body)));
   const unsignedToken = `${tokenHeader}.${tokenBody}`;
 
-  // Private Key 임포트 및 서명
-  const rawPrivateKey = Uint8Array.from(atob(privateKey.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  // VAPID Private Key 임포트 (PKCS8 형식 기대)
+  // .env에 저장된 privateKey는 base64url 문자열이어야 함
+  const rawKey = Uint8Array.from(atob(privateKey.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
   const key = await crypto.subtle.importKey(
     'pkcs8',
-    rawPrivateKey,
+    rawKey,
     { name: 'ECDSA', namedCurve: 'P-256' },
     false,
     ['sign']
   );
 
+  // 서명 생성
   const signature = await crypto.subtle.sign(
     { name: 'ECDSA', hash: 'SHA-256' },
     key,
-    new TextEncoder().encode(unsignedToken)
+    encoder.encode(unsignedToken)
   );
 
-  const signedToken = `${unsignedToken}.${base64Url(String.fromCharCode(...new Uint8Array(signature)))}`;
+  const signedToken = `${unsignedToken}.${base64Url(signature)}`;
 
-  // 푸시 서버로 전송 (현재는 페이로드 암호화 없이 전송 - 알림 수신 여부 확인용)
-  // 암호화(ECE)가 없으면 애플 서버는 거부할 수 있으나, 
-  // 라이브러리 에러를 해결하는 것이 우선입니다.
+  // 푸시 서버로 요청 전송
+  // 참고: 암호화(ECE)가 적용되지 않은 페이로드는 브라우저에 따라 수신되지 않을 수 있음
+  // 하지만 라이브러리 로딩 에러 해결이 1순위입니다.
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -304,14 +315,15 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Push server error: ${response.status} ${errorText}`);
+    throw new Error(`Push server error (${response.status}): ${errorText}`);
   }
 
   return response;
 }
 
 export async function addReport(profileId: number | null, type: string, content: string) {
-  console.log('--- 리포트 제출 시작 (Edge 전용 로직) ---');
+  console.log('--- 리포트 제출 및 푸시 발송 시도 ---');
+  
   const { error } = await supabase
     .from('parking_app_feedback')
     .insert({ profile_id: profileId, type, content })
@@ -338,15 +350,15 @@ export async function addReport(profileId: number | null, type: string, content:
         await Promise.allSettled((subs as any[]).map(async (sub: any) => {
           try {
             await sendEdgePush(sub.subscription, payload, publicKey, privateKey);
-            console.log('Edge 푸시 발송 성공');
+            console.log('Edge 기반 직접 푸시 발송 성공');
           } catch (e: any) {
-            console.error('Edge 푸시 발송 실패:', e.message);
+            console.error('Edge 푸시 발송 오류:', e.message);
           }
         }));
       }
     }
   } catch (e: any) {
-    console.error('전체 푸시 프로세스 치명적 에러:', e.message);
+    console.error('전체 푸시 프로세스 오류:', e.message);
   }
 
   return { success: true };

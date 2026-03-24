@@ -251,13 +251,11 @@ export async function deleteReport(id: number) {
   return { success: true }
 }
 
-// Edge Runtime 호환을 위해 'web-push' 라이브러리를 완전히 배제하고
-// Web Crypto API를 사용하여 VAPID 푸시 전송을 구현합니다.
+// Edge Runtime 호환을 위한 VAPID 직접 구현
 async function sendEdgePush(subscription: any, payload: string, publicKey: string, privateKey: string) {
   const endpoint = subscription.endpoint;
   const origin = new URL(endpoint).origin;
   
-  // Base64Url 인코딩 유틸리티 (타입 오류 수정: any 사용)
   const base64Url = (buf: any) => {
     const uint8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
     return btoa(String.fromCharCode(...Array.from(uint8)))
@@ -266,7 +264,31 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
       .replace(/=+$/, '');
   };
 
-  // JWT 헤더 및 페이로드
+  const encoder = new TextEncoder();
+
+  // VAPID 키 임포트 (JWK 방식이 Edge에서 가장 안정적임)
+  const rawPublic = Uint8Array.from(atob(publicKey.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  const rawPrivate = Uint8Array.from(atob(privateKey.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  
+  // P-256 JWK 구성 (공개키 65바이트 중 앞 1바이트 0x04 제외)
+  const jwk = {
+    kty: 'EC',
+    crv: 'P-256',
+    x: base64Url(rawPublic.slice(1, 33)),
+    y: base64Url(rawPublic.slice(33, 65)),
+    d: base64Url(rawPrivate),
+    ext: true
+  };
+
+  const key = await crypto.subtle.importKey(
+    'jwk',
+    jwk,
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['sign']
+  );
+
+  // JWT 생성
   const header = { alg: 'ES256', typ: 'JWT' };
   const now = Math.floor(Date.now() / 1000);
   const body = {
@@ -275,22 +297,10 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
     sub: 'mailto:admin@scparking.pages.dev'
   };
 
-  const encoder = new TextEncoder();
   const tokenHeader = base64Url(encoder.encode(JSON.stringify(header)));
   const tokenBody = base64Url(encoder.encode(JSON.stringify(body)));
   const unsignedToken = `${tokenHeader}.${tokenBody}`;
 
-  // VAPID Private Key 임포트 (PKCS8 형식 기대)
-  const rawKey = Uint8Array.from(atob(privateKey.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
-  const key = await crypto.subtle.importKey(
-    'pkcs8',
-    rawKey,
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    false,
-    ['sign']
-  );
-
-  // 서명 생성
   const signature = await crypto.subtle.sign(
     { name: 'ECDSA', hash: 'SHA-256' },
     key,
@@ -299,7 +309,6 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
 
   const signedToken = `${unsignedToken}.${base64Url(signature)}`;
 
-  // 푸시 서버로 요청 전송
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -320,8 +329,6 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
 }
 
 export async function addReport(profileId: number | null, type: string, content: string) {
-  console.log('--- 리포트 제출 및 푸시 발송 시도 ---');
-  
   const { error } = await supabase
     .from('parking_app_feedback')
     .insert({ profile_id: profileId, type, content })
@@ -348,9 +355,9 @@ export async function addReport(profileId: number | null, type: string, content:
         await Promise.allSettled((subs as any[]).map(async (sub: any) => {
           try {
             await sendEdgePush(sub.subscription, payload, publicKey, privateKey);
-            console.log('Edge 기반 직접 푸시 발송 성공');
+            console.log('Edge 푸시 발송 성공');
           } catch (e: any) {
-            console.error('Edge 푸시 발송 오류:', e.message);
+            console.error('Edge 푸시 발송 실패:', e.message);
           }
         }));
       }

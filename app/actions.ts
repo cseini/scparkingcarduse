@@ -257,9 +257,10 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
   const endpoint = subscription.endpoint;
   const origin = new URL(endpoint).origin;
   
-  // Base64Url 인코딩 유틸리티
-  const base64Url = (buf: ArrayBuffer) => {
-    return btoa(String.fromCharCode(...new Uint8Array(buf)))
+  // Base64Url 인코딩 유틸리티 (타입 오류 수정: any 사용)
+  const base64Url = (buf: any) => {
+    const uint8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    return btoa(String.fromCharCode(...Array.from(uint8)))
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=+$/, '');
@@ -280,7 +281,6 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
   const unsignedToken = `${tokenHeader}.${tokenBody}`;
 
   // VAPID Private Key 임포트 (PKCS8 형식 기대)
-  // .env에 저장된 privateKey는 base64url 문자열이어야 함
   const rawKey = Uint8Array.from(atob(privateKey.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
   const key = await crypto.subtle.importKey(
     'pkcs8',
@@ -300,8 +300,6 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
   const signedToken = `${unsignedToken}.${base64Url(signature)}`;
 
   // 푸시 서버로 요청 전송
-  // 참고: 암호화(ECE)가 적용되지 않은 페이로드는 브라우저에 따라 수신되지 않을 수 있음
-  // 하지만 라이브러리 로딩 에러 해결이 1순위입니다.
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {

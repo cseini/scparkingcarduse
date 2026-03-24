@@ -189,13 +189,13 @@ async function encryptPayload(subscription: any, payload: string) {
   // 1. ECDH 공유 비밀 생성
   const localKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   const localPublicKey = new Uint8Array(await crypto.subtle.exportKey('raw', localKeys.publicKey));
-  const remoteKey = await crypto.subtle.importKey('raw', p256dh, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
-  const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: remoteKey }, localKeys.privateKey, 256));
+  const remoteKey = await crypto.subtle.importKey('raw', p256dh as any, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: remoteKey } as any, localKeys.privateKey, 256));
 
   // 2. HKDF 유도 (Web Crypto 표준 방식)
   const derive = async (ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, len: number) => {
-    const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
-    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info } as any, key, len));
+    const key = await crypto.subtle.importKey('raw', ikm as any, 'HKDF', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt as any, info: info as any } as any, key, len));
   };
 
   // IKM 유도: HKDF(salt=auth, ikm=sharedSecret, info="Content-Encoding: auth\0")
@@ -207,13 +207,13 @@ async function encryptPayload(subscription: any, payload: string) {
   const iv = await derive(ikm, salt, encoder.encode('Content-Encoding: nonce\0'), 96);
 
   // 4. AES-128-GCM 암호화
-  const aesKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+  const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
   const plainText = encoder.encode(payload);
   const dataToEncrypt = new Uint8Array(plainText.length + 1);
   dataToEncrypt.set(plainText, 0);
   dataToEncrypt.set([0x02], plainText.length); // 0x02: 마지막 레코드 구분자
 
-  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv } as any, aesKey, dataToEncrypt));
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any } as any, aesKey, dataToEncrypt as any));
 
   // 5. 바이너리 메시지 구성 (Salt + RS + IDLen + Key + Ciphertext)
   const result = new Uint8Array(21 + localPublicKey.length + ciphertext.length);

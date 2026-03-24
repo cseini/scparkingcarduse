@@ -279,7 +279,7 @@ export async function addReport(profileId: number | null, type: string, content:
 
     if (publicKey && privateKey) {
       webpush.setVapidDetails(
-        'mailto:test@example.com',
+        'https://scparking.pages.dev',
         publicKey,
         privateKey
       )

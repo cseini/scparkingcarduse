@@ -175,11 +175,20 @@ function base64UrlToUint8Array(base64Url: string) {
   const padding = '='.repeat((4 - (base64Url.length % 4)) % 4);
   const base64 = (base64Url + padding).replace(/-/g, '+').replace(/_/g, '/');
   const rawData = atob(base64);
-  return Uint8Array.from(rawData, c => c.charCodeAt(0));
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
 }
 
 function uint8ArrayToBase64Url(buf: Uint8Array) {
-  return btoa(String.fromCharCode(...buf)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  let binary = '';
+  const len = buf.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(buf[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 async function encryptPayload(subscription: any, payload: string) {
@@ -189,12 +198,12 @@ async function encryptPayload(subscription: any, payload: string) {
 
   const localKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   const localPublicKey = new Uint8Array(await crypto.subtle.exportKey('raw', localKeys.publicKey));
-  const remoteKey = await crypto.subtle.importKey('raw', p256dh, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const remoteKey = await crypto.subtle.importKey('raw', p256dh as any, { name: 'ECDH', namedCurve: 'P-256' } as any, false, []);
   const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: remoteKey } as any, localKeys.privateKey, 256));
 
   const derive = async (ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, len: number) => {
-    const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
-    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info } as any, key, len));
+    const key = await crypto.subtle.importKey('raw', ikm as any, 'HKDF', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt as any, info: info as any } as any, key, len));
   };
 
   // IKM 유도 (auth_secret을 salt로 사용)
@@ -206,18 +215,18 @@ async function encryptPayload(subscription: any, payload: string) {
   const iv = await derive(ikm, salt, encoder.encode('Content-Encoding: nonce\0'), 96);
 
   // AES-128-GCM 암호화
-  const aesKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+  const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
   const plainText = encoder.encode(payload);
   const dataToEncrypt = new Uint8Array(plainText.length + 1);
   dataToEncrypt.set(plainText, 0);
   dataToEncrypt.set([0x02], plainText.length); // aes128gcm delimiter
 
-  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv } as any, aesKey, dataToEncrypt));
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any } as any, aesKey, dataToEncrypt as any));
 
-  // 바이너리 구성: salt(16) | rs(4) | idlen(1) | key(65) | ciphertext
+  // 바이너리 메시지 구성
   const result = new Uint8Array(21 + localPublicKey.length + ciphertext.length);
   result.set(salt, 0);
-  result.set([0x00, 0x00, 0x10, 0x00], 16); // rs=4096
+  result.set([0x00, 0x00, 0x10, 0x00], 16); // RS=4096
   result.set([localPublicKey.length], 20);
   result.set(localPublicKey, 21);
   result.set(ciphertext, 21 + localPublicKey.length);
@@ -229,7 +238,7 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
   const endpoint = subscription.endpoint;
   const url = new URL(endpoint);
   
-  // VAPID JWT 생성 (test-push.ts와 완벽 일치하도록 설정)
+  // VAPID JWT 생성
   const rawPublic = base64UrlToUint8Array(publicKey);
   const rawPrivate = base64UrlToUint8Array(privateKey);
   const jwk = {
@@ -245,7 +254,7 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
   const body = uint8ArrayToBase64Url(encoder.encode(JSON.stringify({ 
     aud: url.origin, 
     exp: Math.floor(Date.now() / 1000) + 43200, 
-    sub: 'mailto:test@example.com' // 로컬 테스트와 일치
+    sub: 'mailto:test@example.com' 
   })));
   const unsignedToken = `${header}.${body}`;
   const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, encoder.encode(unsignedToken));

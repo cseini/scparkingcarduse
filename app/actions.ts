@@ -283,27 +283,45 @@ export async function addReport(profileId: number | null, type: string, content:
     const publicKey = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
     const privateKey = process.env.VAPID_PRIVATE_KEY;
     
+    console.log('📢 푸시 알림 프로세스 시작');
+    console.log(`🔑 키 체크: Public=${!!publicKey}, Private=${!!privateKey}`);
+    
     if (publicKey && privateKey) {
-      const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription');
-      if (subs && subs.length > 0) {
-        const payload = JSON.stringify({
-          title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 새로운 기능 제안',
-          body: content.length > 50 ? content.substring(0, 50) + '...' : content,
-          url: '/'
-        });
-        await Promise.allSettled((subs as any[]).map(async (sub: any) => {
-          try {
-            await sendEdgePush(sub.subscription, payload, publicKey, privateKey);
-          } catch (e: any) {
-            console.error('Edge 푸시 발송 최종 오류:', e.message);
-          }
-        }));
+      const { data: subs, error: subError } = await supabase.from('parking_push_subscriptions').select('subscription');
+      
+      if (subError) {
+        console.error('❌ DB 구독 정보 조회 실패:', subError.message);
+      } else {
+        console.log(`🔍 조회된 구독 수: ${subs?.length || 0}개`);
+        
+        if (subs && subs.length > 0) {
+          const payload = JSON.stringify({
+            title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 새로운 기능 제안',
+            body: content.length > 50 ? content.substring(0, 50) + '...' : content,
+            url: '/'
+          });
+          
+          const results = await Promise.allSettled((subs as any[]).map(async (sub: any, index: number) => {
+            try {
+              console.log(`📤 [${index}] 푸시 발송 시도...`);
+              await sendEdgePush(sub.subscription, payload, publicKey, privateKey);
+              return { index, success: true };
+            } catch (e: any) {
+              console.error(`❌ [${index}] 발송 실패:`, e.message);
+              throw e;
+            }
+          }));
+          
+          console.log('🏁 모든 푸시 발송 시도 종료');
+        } else {
+          console.log('⚠️ 알림을 보낼 구독 정보가 없습니다.');
+        }
       }
     } else {
-      console.error('푸시 알림 실패: VAPID 키가 누락되었습니다.');
+      console.warn('⚠️ VAPID 키가 설정되지 않았습니다. (Private Key 확인 필요)');
     }
   } catch (e: any) {
-    console.error('전체 푸시 프로세스 치명적 오류:', e.message);
+    console.error('🔥 전체 푸시 프로세스 치명적 오류:', e.message);
   }
   return { success: true };
 }

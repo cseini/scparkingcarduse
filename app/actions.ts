@@ -99,7 +99,7 @@ export async function updateParkingCard(id: number, userName: string, profileId:
     const { data: existingColor } = await supabase.from('parking_cards').select('id').eq('profile_id', profileId).eq('color', color).neq('id', id).limit(1)
     if (existingColor && existingColor.length > 0) return { success: false, error: '색상 중복' }
   }
-  const { error } = await supabase.from('parking_cards').update({ user_name: userName, profile_id: profileId, color }).eq('id', id)
+  const { error = null } = await supabase.from('parking_cards').update({ user_name: userName, profile_id: profileId, color }).eq('id', id)
   if (error) return { success: false, error: '수정 실패' }
   revalidatePath('/')
   revalidatePath('/manage')
@@ -168,17 +168,27 @@ export async function deleteReport(id: number) {
 }
 
 // ---------------------------------------------------------
-// 웹푸시 암호화 및 전송 로직 (Edge Runtime 완벽 호환 최적화 버전)
+// 웹푸시 암호화 및 전송 로직 (Edge Runtime 완벽 호환 최종 버전)
 // ---------------------------------------------------------
 
 function base64UrlToUint8Array(base64Url: string) {
   const padding = '='.repeat((4 - (base64Url.length % 4)) % 4);
   const base64 = (base64Url + padding).replace(/-/g, '+').replace(/_/g, '/');
-  return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
 }
 
 function uint8ArrayToBase64Url(buf: Uint8Array) {
-  return btoa(String.fromCharCode(...Array.from(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  let binary = '';
+  const len = buf.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(buf[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 async function encryptPayload(subscription: any, payload: string) {
@@ -192,30 +202,34 @@ async function encryptPayload(subscription: any, payload: string) {
   const remoteKey = await crypto.subtle.importKey('raw', p256dh as any, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
   const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: remoteKey } as any, localKeys.privateKey, 256));
 
-  // 2. HKDF 유도 (Web Crypto 표준 방식)
+  // 2. HKDF 유도 함수
   const derive = async (ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, len: number) => {
     const key = await crypto.subtle.importKey('raw', ikm as any, 'HKDF', false, ['deriveBits']);
     return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt as any, info: info as any } as any, key, len));
   };
 
-  // IKM 유도: HKDF(salt=auth, ikm=sharedSecret, info="Content-Encoding: auth\0")
-  const ikm = await derive(sharedSecret, auth, encoder.encode('Content-Encoding: auth\0'), 256);
+  // IKM 유도: RFC 8291
+  const infoAuth = new Uint8Array([...encoder.encode('Content-Encoding: auth'), 0]);
+  const ikm = await derive(sharedSecret, auth, infoAuth, 256);
 
   // 3. Salt 생성 및 CEK, IV 유도
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const cek = await derive(ikm, salt, encoder.encode('Content-Encoding: aes128gcm\0'), 128);
-  const iv = await derive(ikm, salt, encoder.encode('Content-Encoding: nonce\0'), 96);
+  const infoCek = new Uint8Array([...encoder.encode('Content-Encoding: aes128gcm'), 0]);
+  const infoNonce = new Uint8Array([...encoder.encode('Content-Encoding: nonce'), 0]);
+  
+  const cek = await derive(ikm, salt, infoCek, 128);
+  const iv = await derive(ikm, salt, infoNonce, 96);
 
   // 4. AES-128-GCM 암호화
   const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
   const plainText = encoder.encode(payload);
   const dataToEncrypt = new Uint8Array(plainText.length + 1);
   dataToEncrypt.set(plainText, 0);
-  dataToEncrypt.set([0x02], plainText.length); // 0x02: 마지막 레코드 구분자
+  dataToEncrypt.set([0x02], plainText.length); // 0x02: Delimiter
 
   const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any } as any, aesKey, dataToEncrypt as any));
 
-  // 5. 바이너리 메시지 구성 (Salt + RS + IDLen + Key + Ciphertext)
+  // 5. 바이너리 메시지 구성
   const result = new Uint8Array(21 + localPublicKey.length + ciphertext.length);
   result.set(salt, 0);
   result.set([0x00, 0x00, 0x10, 0x00], 16); // RS=4096
@@ -228,9 +242,9 @@ async function encryptPayload(subscription: any, payload: string) {
 
 async function sendEdgePush(subscription: any, payload: string, publicKey: string, privateKey: string) {
   const endpoint = subscription.endpoint;
-  const origin = new URL(endpoint).origin;
+  const url = new URL(endpoint);
   
-  // VAPID JWT 생성
+  // VAPID JWT 생성 (만료 시간 12시간으로 단축)
   const rawPublic = base64UrlToUint8Array(publicKey);
   const rawPrivate = base64UrlToUint8Array(privateKey);
   const jwk = {
@@ -244,15 +258,14 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
   const encoder = new TextEncoder();
   const header = uint8ArrayToBase64Url(encoder.encode(JSON.stringify({ alg: 'ES256', typ: 'JWT' })));
   const body = uint8ArrayToBase64Url(encoder.encode(JSON.stringify({ 
-    aud: origin, 
-    exp: Math.floor(Date.now() / 1000) + 86400, 
+    aud: url.origin, 
+    exp: Math.floor(Date.now() / 1000) + 43200, 
     sub: 'mailto:admin@scparking.pages.dev' 
   })));
   const unsignedToken = `${header}.${body}`;
   const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, encoder.encode(unsignedToken));
   const signedToken = `${unsignedToken}.${uint8ArrayToBase64Url(new Uint8Array(signature))}`;
 
-  // 암호화된 페이로드 생성
   const encryptedPayload = await encryptPayload(subscription, payload);
   
   const response = await fetch(endpoint, {
@@ -260,6 +273,8 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
     headers: {
       'Authorization': `vapid t=${signedToken}, k=${publicKey}`,
       'TTL': '86400',
+      'Urgency': 'high',
+      'Topic': url.hostname,
       'Content-Type': 'application/octet-stream',
       'Content-Encoding': 'aes128gcm'
     },

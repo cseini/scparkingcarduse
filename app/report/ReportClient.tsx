@@ -77,11 +77,11 @@ export default function ReportClient({ activeProfileId, activeProfileName }: Rep
       }
     } catch (err: any) {
       console.error(err)
-      alert(`알림 설정 오류: ${err.message}`); // 디버깅을 위해 상세 메시지 노출
+      alert(`알림 설정 오류: ${err.message}`); 
       showToast('알림 설정 중 오류가 발생했습니다.', 'error')
     }
   }
-... (rest of the file remains the same)
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!content.trim() || loading) return

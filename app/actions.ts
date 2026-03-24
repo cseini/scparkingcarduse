@@ -210,6 +210,19 @@ export async function setProfileCookieAction(id: string) {
   return { success: true }
 }
 
+export async function addReport(profileId: number | null, type: string, content: string) {
+  const { error } = await supabase
+    .from('parking_app_feedback')
+    .insert({ profile_id: profileId, type, content })
+
+  if (error) {
+    console.error('Error adding report:', error)
+    return { success: false, error: '제출에 실패했습니다. 나중에 다시 시도해 주세요.' }
+  }
+
+  return { success: true }
+}
+
 // 자동 리셋 체크는 이제 필요 없으므로 빈 함수로 두거나 나중에 제거
 export async function checkAutoReset(profileId: number) {
   return;

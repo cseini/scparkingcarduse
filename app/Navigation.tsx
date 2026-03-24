@@ -142,6 +142,9 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
               <li>
                 <Link href="/manage" className={`menu-item ${pathname === '/manage' ? 'active' : ''}`} onClick={toggleMenu}>카드 관리</Link>
               </li>
+              <li>
+                <Link href="/report" className={`menu-item ${pathname === '/report' ? 'active' : ''}`} onClick={toggleMenu}>버그 리포트</Link>
+              </li>
             </ul>
           </nav>
         </>

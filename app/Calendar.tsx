@@ -15,7 +15,7 @@ import {
   isSaturday,
   isSunday
 } from 'date-fns'
-import { ko } from 'date-fns/locale'
+import { ko } from 'date-fns/locale/ko'
 import { toZonedTime } from 'date-fns-tz'
 import { useParkingCard, deleteUsageHistory, checkAutoReset, getUsageHistory } from './actions'
 import { useToast } from './Toast'
@@ -275,5 +275,6 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
         </div>
       )}
     </div>
+    </>
   )
 }

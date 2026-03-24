@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabaseClient'
 import Calendar from './Calendar'
 import { getUsageHistory, getProfiles } from './actions'
 import { cookies } from 'next/headers'
+import { startOfMonth, endOfMonth } from 'date-fns'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
@@ -39,9 +40,6 @@ async function getParkingCards(profileId?: number) {
     }
   })
 }
-
-import { startOfMonth, endOfMonth } from 'date-fns'
-
 
 export default async function Home() {
   const cookieStore = await cookies()

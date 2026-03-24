@@ -197,12 +197,12 @@ async function encryptPayload(subscription: any, payload: string) {
   
   // 3. RFC 8291 키 유도 체인 (정밀 보정)
   const hkdfExtract = async (salt: Uint8Array, ikm: Uint8Array) => {
-    const key = await crypto.subtle.importKey('raw', salt, 'HKDF', false, ['deriveBits']);
-    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: ikm }, key, 256));
+    const key = await crypto.subtle.importKey('raw', salt as any, 'HKDF', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: ikm as any }, key, 256));
   };
   const hkdfExpand = async (prk: Uint8Array, info: Uint8Array, len: number) => {
-    const key = await crypto.subtle.importKey('raw', prk, 'HKDF', false, ['deriveBits']);
-    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info }, key, len));
+    const key = await crypto.subtle.importKey('raw', prk as any, 'HKDF', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: info as any }, key, len));
   };
 
   // IKM 유도: HKDF-Extract(auth, shared_secret) -> HKDF-Expand(IKM, "Content-Encoding: auth\0", 32)
@@ -224,10 +224,9 @@ async function encryptPayload(subscription: any, payload: string) {
   dataToEncrypt.set(plainText, 0);
   dataToEncrypt.set([0x02], plainText.length); // 0x02 is the delimiter for aes128gcm
 
-  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any }, aesKey, dataToEncrypt));
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any }, aesKey, dataToEncrypt as any));
 
   // 5. 최종 바이너리 구성 (RFC 8291 Header)
-  // salt(16) | rs(4) | idlen(1) | key(65) | ciphertext
   const result = new Uint8Array(21 + localPublicKey.length + ciphertext.length);
   result.set(salt, 0);
   result.set([0x00, 0x00, 0x10, 0x00], 16); // rs=4096
@@ -255,7 +254,7 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
   const header = uint8ArrayToBase64Url(encoder.encode(JSON.stringify({ alg: 'ES256', typ: 'JWT' })));
   const body = uint8ArrayToBase64Url(encoder.encode(JSON.stringify({ aud: origin, exp: Math.floor(Date.now() / 1000) + 86400, sub: 'mailto:admin@scparking.pages.dev' })));
   const unsignedToken = `${header}.${body}`;
-  const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, encoder.encode(unsignedToken));
+  const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, encoder.encode(unsignedToken) as any);
   const signedToken = `${unsignedToken}.${uint8ArrayToBase64Url(new Uint8Array(signature))}`;
   const encryptedPayload = await encryptPayload(subscription, payload);
   
@@ -267,7 +266,7 @@ async function sendEdgePush(subscription: any, payload: string, publicKey: strin
       'Content-Type': 'application/octet-stream',
       'Content-Encoding': 'aes128gcm'
     },
-    body: encryptedPayload
+    body: encryptedPayload as any
   });
   if (!response.ok) {
     const text = await response.text();

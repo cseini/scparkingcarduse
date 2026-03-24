@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabaseClient'
-import ParkingCard from './ParkingCard'
 import ResetButton from './ResetButton'
+import Calendar from './Calendar'
+import { getUsageHistory } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,9 @@ async function getParkingCards() {
 }
 
 export default async function Home() {
+  const now = new Date()
   const cards = await getParkingCards()
+  const history = await getUsageHistory(now.getFullYear(), now.getMonth() + 1)
   const isEmpty = cards.length === 0
 
   return (
@@ -32,17 +35,19 @@ export default async function Home() {
           <p>아래 버튼을 눌러 초기 데이터를 생성해 주세요.</p>
         </div>
       ) : (
-        <div className="card-grid">
-          {cards.map((card) => (
-            <ParkingCard 
-              key={card.id} 
-              id={card.id}
-              userName={card.user_name}
-              remainingUses={card.remaining_uses}
-              lastUsedAt={card.last_used_at}
-            />
-          ))}
-        </div>
+        <>
+          <div className="card-grid">
+            {cards.map((card) => (
+              <div key={card.id} className={`parking-card user-${card.user_name}`}>
+                <h3 className="user-name">{card.user_name}</h3>
+                <div className="remaining">{card.remaining_uses}</div>
+                <div className="remaining-label">회 남음</div>
+              </div>
+            ))}
+          </div>
+
+          <Calendar cards={cards} history={history} />
+        </>
       )}
 
       <ResetButton isEmpty={isEmpty} />

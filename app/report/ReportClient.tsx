@@ -5,6 +5,18 @@ import { addReport, saveSubscription } from '../actions'
 import { useRouter } from 'next/navigation'
 import { useToast } from '../Toast'
 
+// VAPID 키를 Uint8Array로 변환하는 유틸리티 함수
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 interface ReportClientProps {
   activeProfileId?: number
   activeProfileName?: string
@@ -45,22 +57,31 @@ export default function ReportClient({ activeProfileId, activeProfileName }: Rep
       }
 
       const registration = await navigator.serviceWorker.register('/sw.js')
+      
+      const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!publicKey) {
+        throw new Error('VAPID Public Key가 설정되지 않았습니다.');
+      }
+
       const sub = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: 'BNEs4hdEfJBGfV8BezYU1aP1AlW7PBROBeiVC9g6Zt3xWnE6cjhPbb7cgHjRppItIIX-Dv_aQUDCJI1gZSgP0c8'
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
       })
 
       const result = await saveSubscription(activeProfileId || null, sub)
       if (result.success) {
         setIsSubscribed(true)
         showToast('이제 리포트가 올라오면 알림을 보내드립니다! 🔔', 'success')
+      } else {
+        throw new Error(result.error || '구독 정보 저장 실패');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      alert(`알림 설정 오류: ${err.message}`); // 디버깅을 위해 상세 메시지 노출
       showToast('알림 설정 중 오류가 발생했습니다.', 'error')
     }
   }
-
+... (rest of the file remains the same)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!content.trim() || loading) return

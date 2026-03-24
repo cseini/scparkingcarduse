@@ -204,7 +204,9 @@ export async function setProfileCookieAction(id: string) {
   const { cookies } = await import('next/headers')
   const cookieStore = await cookies()
   cookieStore.set('selected_profile_id', id, { maxAge: 60 * 60 * 24 * 365, path: '/' })
-  revalidatePath('/')
+  
+  // 모든 페이지의 데이터를 서버측에서 다시 가져오도록 설정
+  revalidatePath('/', 'layout')
   return { success: true }
 }
 

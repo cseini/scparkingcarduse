@@ -73,6 +73,9 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
         
         await setProfileCookieAction(idStr)
         
+        // 서버 데이터를 강제로 새로고침하여 다른 페이지 이동 시에도 반영되게 함
+        router.refresh()
+        
         setIsPinModalOpen(false)
         setIsProfileModalOpen(false)
         setPinInput('')
@@ -181,10 +184,10 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
 
       {/* PIN Input Modal */}
       {isPinModalOpen && targetProfile && (
-        <div className="modal-overlay" onClick={() => setIsPinModalOpen(false)} style={{ zIndex: 1200 }}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '320px' }}>
-            <h3>PIN 코드 입력</h3>
-            <p className="modal-subtitle">[{targetProfile.name}] 프로필의 핀코드를 입력하세요.</p>
+        <div className="modal-overlay" onClick={() => setIsPinModalOpen(false)} style={{ zIndex: 3000 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '280px', padding: '1.5rem 1rem' }}>
+            <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>PIN 코드 입력</h3>
+            <p className="modal-subtitle" style={{ fontSize: '0.75rem', marginBottom: '1.25rem' }}>[{targetProfile.name}] 프로필의 핀코드를 입력하세요.</p>
             <form onSubmit={handlePinSubmit}>
               <input 
                 type="password" 
@@ -198,21 +201,23 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
                 }}
                 className="input-field"
                 style={{ 
-                  fontSize: '2rem', 
+                  fontSize: '1.5rem', 
                   textAlign: 'center', 
-                  letterSpacing: '0.5rem', 
-                  marginBottom: pinError ? '0.5rem' : '1.5rem',
-                  borderColor: pinError ? '#ef4444' : '#cbd5e1'
+                  letterSpacing: '0.4rem', 
+                  marginBottom: pinError ? '0.5rem' : '1.25rem',
+                  borderColor: pinError ? '#ef4444' : '#cbd5e1',
+                  width: '100%',
+                  padding: '0.5rem'
                 }}
                 autoFocus
                 disabled={pinLoading}
               />
-              {pinError && <p style={{ color: '#ef4444', fontSize: '0.8rem', marginBottom: '1rem' }}>{pinError}</p>}
+              {pinError && <p style={{ color: '#ef4444', fontSize: '0.7rem', marginBottom: '1rem' }}>{pinError}</p>}
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button type="submit" className="add-button" style={{ flex: 1 }} disabled={pinInput.length !== 4 || pinLoading}>
+                <button type="submit" className="add-button" style={{ flex: 1, fontSize: '0.85rem' }} disabled={pinInput.length !== 4 || pinLoading}>
                   {pinLoading ? '확인 중...' : '확인'}
                 </button>
-                <button type="button" className="modal-close" style={{ flex: 1, marginTop: 0 }} onClick={() => setIsPinModalOpen(false)}>취소</button>
+                <button type="button" className="modal-close" style={{ flex: 1, marginTop: 0, fontSize: '0.85rem' }} onClick={() => setIsPinModalOpen(false)}>취소</button>
               </div>
             </form>
           </div>

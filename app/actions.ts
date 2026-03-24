@@ -254,30 +254,44 @@ export async function deleteReport(id: number) {
 }
 
 export async function addReport(profileId: number | null, type: string, content: string) {
+  console.log('--- 리포트 제출 시작 ---');
   const { error } = await supabase
     .from('parking_app_feedback')
     .insert({ profile_id: profileId, type, content })
 
   if (error) {
-    console.error('Error adding report:', error)
-    return { success: false, error: '제출에 실패했습니다.' }
+    console.error('DB 저장 실패:', error);
+    return { success: false, error: '제출에 실패했습니다.' };
   }
+
+  console.log('DB 저장 성공, 푸시 발송 준비 중...');
 
   // 푸시 알림 발송 로직
   try {
-    // VAPID 설정 (함수 내부로 이동하여 빌드 오류 방지)
-    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!;
-    const privateKey = process.env.VAPID_PRIVATE_KEY!;
+    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    const privateKey = process.env.VAPID_PRIVATE_KEY;
     
+    console.log('VAPID 키 확인:', { 
+      hasPublic: !!publicKey, 
+      hasPrivate: !!privateKey,
+      publicPrefix: publicKey?.substring(0, 10)
+    });
+
     if (publicKey && privateKey) {
       webpush.setVapidDetails(
-        'https://scparking.pages.dev', // 실제 도메인 또는 유효한 URL 권장
+        'mailto:test@example.com',
         publicKey,
         privateKey
       )
 
-      const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription')
+      const { data: subs, error: subError } = await supabase.from('parking_push_subscriptions').select('subscription');
       
+      if (subError) {
+        console.error('구독 정보 조회 실패:', subError);
+      }
+
+      console.log('조회된 구독 수:', subs?.length || 0);
+
       if (subs && subs.length > 0) {
         const payload = JSON.stringify({
           title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 새로운 기능 제안',
@@ -285,18 +299,26 @@ export async function addReport(profileId: number | null, type: string, content:
           url: '/'
         })
 
-        await Promise.all((subs as any[]).map((sub: any) => 
-          webpush.sendNotification(sub.subscription, payload).catch(e => {
-            console.error('개별 푸시 발송 실패:', e)
-          })
-        ))
+        const results = await Promise.allSettled((subs as any[]).map((sub: any) => 
+          webpush.sendNotification(sub.subscription, payload)
+        ));
+
+        results.forEach((res, i) => {
+          if (res.status === 'rejected') {
+            console.error(`푸시 발송 실패 [${i}]:`, res.reason);
+          } else {
+            console.log(`푸시 발송 성공 [${i}]`);
+          }
+        });
       }
+    } else {
+      console.warn('VAPID 키가 설정되지 않아 푸시를 건너뜁니다.');
     }
-  } catch (e) {
-    console.error('전체 푸시 프로세스 실패:', e)
+  } catch (e: any) {
+    console.error('전체 푸시 프로세스 치명적 에러:', e.message, e.stack);
   }
 
-  return { success: true }
+  return { success: true };
 }
 
 export async function saveSubscription(profileId: number | null, subscription: any) {

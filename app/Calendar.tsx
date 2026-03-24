@@ -11,7 +11,9 @@ import {
   endOfWeek,
   isToday,
   addMonths,
-  subMonths
+  subMonths,
+  isSaturday,
+  isSunday
 } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { useParkingCard } from './actions'
@@ -86,8 +88,8 @@ export default function Calendar({ cards, history }: CalendarProps) {
       </div>
 
       <div className="calendar-grid">
-        {['일', '월', '화', '수', '목', '금', '토'].map((day) => (
-          <div key={day} className="calendar-day-label">
+        {['일', '월', '화', '수', '목', '금', '토'].map((day, index) => (
+          <div key={day} className={`calendar-day-label ${index === 0 ? 'sunday-label' : ''} ${index === 6 ? 'saturday-label' : ''}`}>
             {day}
           </div>
         ))}
@@ -95,10 +97,16 @@ export default function Calendar({ cards, history }: CalendarProps) {
           const dayHistory = history.filter((h) => isSameDay(new Date(h.used_at), day))
           const isCurrentMonth = isSameDay(startOfMonth(day), monthStart)
           
+          let dayClass = 'calendar-day'
+          if (!isCurrentMonth) dayClass += ' other-month'
+          if (isToday(day)) dayClass += ' today'
+          if (isSaturday(day)) dayClass += ' saturday'
+          if (isSunday(day)) dayClass += ' sunday'
+          
           return (
             <div 
               key={day.toISOString()} 
-              className={`calendar-day ${!isCurrentMonth ? 'other-month' : ''} ${isToday(day) ? 'today' : ''}`}
+              className={dayClass}
               onClick={() => handleDateClick(day)}
             >
               <span className="day-number">{format(day, 'd')}</span>

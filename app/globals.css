@@ -137,6 +137,14 @@ h1 {
   color: #64748b;
 }
 
+.calendar-day-label.sunday-label {
+  color: #ef4444; /* Red for Sunday */
+}
+
+.calendar-day-label.saturday-label {
+  color: #3b82f6; /* Blue for Saturday */
+}
+
 .calendar-day {
   background: white;
   min-height: 80px;
@@ -157,18 +165,27 @@ h1 {
   background: #fcfdfe;
 }
 
+.calendar-day.saturday .day-number {
+  color: #3b82f6;
+}
+
+.calendar-day.sunday .day-number {
+  color: #ef4444;
+}
+
 .calendar-day.today {
   background: #eff6ff;
+  border: 2px solid #3b82f6;
 }
 
 .calendar-day.today .day-number {
-  color: #2563eb;
   font-weight: 800;
 }
 
 .day-number {
   font-size: 0.875rem;
   font-weight: 600;
+  color: #334155;
 }
 
 .usage-indicators {
@@ -492,10 +509,15 @@ h1 {
   margin-left: 0.5rem;
 }
 
+.card-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.edit-button,
 .delete-button {
   background: white;
-  color: #ef4444;
-  border: 1px solid #ef4444;
+  border: 1px solid #cbd5e1;
   padding: 0.25rem 0.75rem;
   border-radius: 0.25rem;
   font-size: 0.875rem;
@@ -503,12 +525,73 @@ h1 {
   transition: all 0.2s;
 }
 
+.edit-button:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.delete-button {
+  color: #ef4444;
+  border-color: #ef4444;
+}
+
 .delete-button:hover:not(:disabled) {
   background: #fef2f2;
 }
 
+.edit-button:disabled,
 .delete-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
+/* Edit Form inside List Item */
+.edit-form {
+  display: flex;
+  flex: 1;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.edit-name {
+  flex: 2;
+  padding: 0.5rem;
+}
+
+.edit-uses {
+  flex: 1;
+  padding: 0.5rem;
+  width: 80px;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.save-button {
+  background: #10b981;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.save-button:hover:not(:disabled) {
+  background: #059669;
+}
+
+.cancel-button {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.cancel-button:hover:not(:disabled) {
+  background: #e2e8f0;
+}

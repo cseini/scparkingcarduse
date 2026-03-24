@@ -1,4 +1,5 @@
 
+// @ts-nocheck
 import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';

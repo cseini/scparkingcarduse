@@ -16,7 +16,7 @@ export default async function ReportPage() {
   }
 
   const profileId = profileCookie ? Number(profileCookie) : undefined
-  const activeProfile = profiles.find(p => p.id === profileId)
+  const activeProfile = profiles.find((p: any) => p.id === profileId)
 
   return (
     <main className="container">

@@ -275,7 +275,7 @@ export async function addReport(profileId: number | null, type: string, content:
           url: '/'
         })
 
-        await Promise.all(subs.map(sub => 
+        await Promise.all((subs as any[]).map((sub: any) => 
           webpush.sendNotification(sub.subscription, payload).catch(e => {
             console.error('개별 푸시 발송 실패:', e)
           })

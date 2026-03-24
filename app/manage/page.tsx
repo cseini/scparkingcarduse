@@ -33,8 +33,8 @@ async function getParkingCards(profileId?: number) {
     .gte('used_at', start)
     .lte('used_at', end)
 
-  return cards.map(card => {
-    const usedCount = history?.filter(h => h.card_id === card.id).length || 0
+  return cards.map((card: any) => {
+    const usedCount = history?.filter((h: any) => h.card_id === card.id).length || 0
     return {
       ...card,
       remaining_uses: Math.max(0, 3 - usedCount)
@@ -55,7 +55,7 @@ export default async function ManagePage() {
 
   const profileId = profileCookie ? Number(profileCookie) : undefined
   const cards = await getParkingCards(profileId)
-  const activeProfile = profiles.find(p => p.id === profileId)
+  const activeProfile = profiles.find((p: any) => p.id === profileId)
 
   return (
     <main className="container">

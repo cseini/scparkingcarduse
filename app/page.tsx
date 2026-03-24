@@ -32,8 +32,8 @@ async function getParkingCards(profileId?: number) {
     .gte('used_at', start)
     .lte('used_at', end)
 
-  return cards.map(card => {
-    const usedCount = history?.filter(h => h.card_id === card.id).length || 0
+  return cards.map((card: any) => {
+    const usedCount = history?.filter((h: any) => h.card_id === card.id).length || 0
     return {
       ...card,
       remaining_uses: Math.max(0, 3 - usedCount)
@@ -44,14 +44,14 @@ async function getParkingCards(profileId?: number) {
 export default async function Home() {
   const cookieStore = await cookies()
   const profiles = await getProfiles()
-  
+
   const profileCookie = cookieStore.get('selected_profile_id')?.value
   const profileId = profileCookie ? parseInt(profileCookie, 10) : undefined
-  
+
   const now = new Date()
   const cards = await getParkingCards(profileId)
   const history = await getUsageHistory(now.getFullYear(), now.getMonth() + 1, profileId)
-  
+
   // 프로필이 선택되지 않았을 때와 선택되었으나 카드가 없을 때를 명확히 구분
   const isProfileNotSelected = !profileId || isNaN(profileId)
   const isCardsEmpty = cards.length === 0

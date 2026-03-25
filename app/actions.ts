@@ -168,78 +168,83 @@ export async function deleteReport(id: number) {
 }
 
 // ---------------------------------------------------------
-// 웹푸시 최종 무결성 로직 (로컬 web-push 라이브러리와 100% 동일한 결과물)
+// 웹푸시 최종 정석 로직 (iOS/Edge 완벽 대응)
 // ---------------------------------------------------------
 
-const b64 = {
+const utils = {
   toBuf: (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
   fromBuf: (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 };
 
 async function encryptPayload(sub: any, payload: string) {
   const encoder = new TextEncoder();
-  const serverKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
-  const serverPub = new Uint8Array(await crypto.subtle.exportKey('raw', serverKeys.publicKey));
-  const clientPub = b64.toBuf(sub.keys.p256dh);
-  const clientAuth = b64.toBuf(sub.keys.auth);
+  const p256dh = utils.toBuf(sub.keys.p256dh);
+  const auth = utils.toBuf(sub.keys.auth);
 
-  const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({
-    name: 'ECDH', public: await crypto.subtle.importKey('raw', clientPub as any, { name: 'ECDH', namedCurve: 'P-256' } as any, false, [])
-  } as any, serverKeys.privateKey, 256));
+  // 1. ECDH Shared Secret
+  const localKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const localPub = new Uint8Array(await crypto.subtle.exportKey('raw', localKeys.publicKey));
+  const remotePub = await crypto.subtle.importKey('raw', p256dh as any, { name: 'ECDH', namedCurve: 'P-256' } as any, false, []);
+  const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: remotePub } as any, localKeys.privateKey, 256));
 
+  // 2. HKDF 유도 (RFC 8291 표준 절차 준수)
   const hkdf = async (ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, bits: number) => {
     const key = await crypto.subtle.importKey('raw', ikm as any, 'HKDF', false, ['deriveBits']);
     return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt as any, info: info as any } as any, key, bits));
   };
 
-  // IKM 유도: RFC 8291
-  const ikm = await hkdf(sharedSecret, clientAuth, new Uint8Array([...encoder.encode('Content-Encoding: auth'), 0]), 256);
+  // IKM 유도: HKDF(salt=auth, ikm=sharedSecret, info="Content-Encoding: auth\0")
+  const ikm = await hkdf(sharedSecret, auth, new Uint8Array([...encoder.encode('Content-Encoding: auth'), 0]), 256);
+
+  // Salt 및 CEK, IV 유도
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const cek = await hkdf(ikm, salt, new Uint8Array([...encoder.encode('Content-Encoding: aes128gcm'), 0]), 128);
   const iv = await hkdf(ikm, salt, new Uint8Array([...encoder.encode('Content-Encoding: nonce'), 0]), 96);
 
-  const plainText = encoder.encode(payload);
-  const data = new Uint8Array(plainText.length + 1);
-  data.set(plainText, 0);
-  data.set([2], plainText.length); // Record delimiter
-
+  // 3. AES-128-GCM 암호화
   const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any, tagLength: 128 } as any, aesKey, data as any);
+  const plainText = encoder.encode(payload);
+  const record = new Uint8Array(plainText.length + 1);
+  record.set(plainText, 0);
+  record.set([2], plainText.length); // 0x02: Record delimiter
 
-  const result = new Uint8Array(21 + 65 + encrypted.byteLength);
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any, tagLength: 128 } as any, aesKey, record as any);
+
+  // 4. 바이너리 조립: salt(16) | rs(4) | idlen(1) | pubkey(65) | ciphertext
+  const result = new Uint8Array(21 + 65 + ciphertext.byteLength);
   result.set(salt, 0);
-  result.set([0, 0, 16, 0], 16); // big-endian 4096
-  result.set([65], 20);
-  result.set(serverPub, 21);
-  result.set(new Uint8Array(encrypted), 86);
+  result.set([0, 0, 16, 0], 16); // RS=4096
+  result.set([65], 20); // IDLen=65
+  result.set(localPub, 21);
+  result.set(new Uint8Array(ciphertext), 86);
+
   return result;
 }
 
 async function sendPush(sub: any, payload: string, pub: string, priv: string) {
-  const endpoint = sub.endpoint;
-  const origin = new URL(endpoint).origin;
+  const url = new URL(sub.endpoint);
   
   const signingKey = await crypto.subtle.importKey('jwk', {
     kty: 'EC', crv: 'P-256', ext: true,
-    x: b64.fromBuf(b64.toBuf(pub).slice(1, 33)),
-    y: b64.fromBuf(b64.toBuf(pub).slice(33, 65)),
-    d: b64.fromBuf(b64.toBuf(priv))
+    x: utils.fromBuf(utils.toBuf(pub).slice(1, 33)),
+    y: utils.fromBuf(utils.toBuf(pub).slice(33, 65)),
+    d: utils.fromBuf(utils.toBuf(priv))
   } as any, { name: 'ECDSA', namedCurve: 'P-256' } as any, false, ['sign']);
 
   const encoder = new TextEncoder();
-  const header = b64.fromBuf(encoder.encode(JSON.stringify({alg:"ES256"})));
-  const body = b64.fromBuf(encoder.encode(JSON.stringify({
-    aud: origin,
-    exp: Math.floor(Date.now() / 1000) + 43200,
-    sub: "mailto:test@example.com"
+  const header = utils.fromBuf(encoder.encode(JSON.stringify({ alg: 'ES256', typ: 'JWT' })));
+  const body = utils.fromBuf(encoder.encode(JSON.stringify({ 
+    aud: url.origin, 
+    exp: Math.floor(Date.now() / 1000) + 86400, 
+    sub: 'mailto:admin@scparking.pages.dev' 
   })));
   const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' } as any, signingKey, encoder.encode(`${header}.${body}`) as any);
-  const token = `${header}.${body}.${b64.fromBuf(new Uint8Array(sig))}`;
+  const token = `${header}.${body}.${utils.fromBuf(new Uint8Array(sig))}`;
 
-  const response = await fetch(endpoint, {
+  const response = await fetch(sub.endpoint, {
     method: 'POST',
     headers: {
-      'Authorization': `VAPID t=${token}, k=${pub.replace(/=/g, '')}`,
+      'Authorization': `vapid t=${token}, k=${pub.replace(/=/g, '')}`,
       'TTL': '86400',
       'Content-Type': 'application/octet-stream',
       'Content-Encoding': 'aes128gcm'
@@ -251,57 +256,25 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
 }
 
 export async function addReport(profileId: number | null, type: string, content: string) {
-  console.log('📝 리포트 제출 시작:', { profileId, type });
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
-  if (error) {
-    console.error('❌ 리포트 DB 저장 실패:', error.message);
-    return { success: false, error: '제출 실패' };
-  }
+  if (error) return { success: false, error: '제출 실패' }
   
   try {
     const pub = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
     const priv = process.env.VAPID_PRIVATE_KEY;
-    
-    console.log('🔑 VAPID 키 체크:', { hasPub: !!pub, hasPriv: !!priv });
-
     if (pub && priv) {
-      const { data: subs, error: subError } = await supabase.from('parking_push_subscriptions').select('subscription');
-      
-      if (subError) {
-        console.error('❌ 구독 정보 조회 실패:', subError.message);
-      } else {
-        console.log(`🔍 조회된 구독 수: ${subs?.length || 0}개`);
-        
-        if (subs && subs.length > 0) {
-          const payload = JSON.stringify({ 
-            title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
-            body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
-            url: '/' 
-          });
-
-          console.log('🚀 모든 기기로 푸시 발송 시작...');
-          // Edge 환경에서는 Promise가 완료될 때까지 확실히 기다려야 함
-          const results = await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payload, pub, priv)));
-          
-          results.forEach((res, i) => {
-            if (res.status === 'fulfilled') {
-              console.log(`✅ [${i}] 발송 성공 (Status: ${res.value})`);
-            } else {
-              console.error(`❌ [${i}] 발송 실패:`, res.reason);
-            }
-          });
-          console.log('🏁 모든 푸시 발송 프로세스 종료');
-        } else {
-          console.log('⚠️ 알림을 보낼 구독 정보가 없습니다.');
-        }
+      const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription');
+      if (subs && subs.length > 0) {
+        const payload = JSON.stringify({ 
+          title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
+          body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
+          url: '/' 
+        });
+        // 모든 발송이 완료될 때까지 확실히 기다림 (Edge 핵심)
+        await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payload, pub, priv)));
       }
-    } else {
-      console.warn('⚠️ VAPID 키가 누락되어 푸시를 보내지 못했습니다.');
     }
-  } catch (e: any) { 
-    console.error('🔥 푸시 엔진 치명적 오류:', e.message); 
-  }
-  
+  } catch (e: any) { console.error('🔥 푸시 엔진 치명적 오류:', e.message); }
   return { success: true };
 }
 

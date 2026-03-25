@@ -263,21 +263,39 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
 async function sendPushToSein(payload: { title: string; body: string; url: string }) {
   try {
     const priv = process.env.VAPID_PRIVATE_KEY;
-    if (VAPID_PUBLIC_KEY && priv) {
-      // profiles 테이블에서 name이 '세인'인 프로필의 ID를 연계하여 구독 정보를 가져옵니다.
-      const { data: subs } = await supabase
-        .from('parking_push_subscriptions')
-        .select('subscription, profiles!inner(name)')
-        .eq('profiles.name', '세인');
+    if (!priv) {
+      console.error('❌ VAPID 비공개 키가 설정되지 않았습니다. 환경 변수를 확인하세요.');
+      return;
+    }
+    
+    // [핵심] 쿼리 로그 강화
+    const { data: subs, error } = await supabase
+      .from('parking_push_subscriptions')
+      .select('subscription, profiles!inner(name)')
+      .eq('profiles.name', '세인');
 
-      if (subs && subs.length > 0) {
-        const payloadStr = JSON.stringify(payload);
-        // 모든 발송이 완료될 때까지 대기
-        await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payloadStr, VAPID_PUBLIC_KEY, priv)));
-      }
+    if (error) {
+      console.error('❌ DB 구독 정보 조회 중 오류:', error.message);
+      return;
+    }
+
+    if (subs && subs.length > 0) {
+      const payloadStr = JSON.stringify(payload);
+      console.log(`📤 '세인'님(기기 ${subs.length}대)에게 푸시 발송 시도...`);
+      const results = await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payloadStr, VAPID_PUBLIC_KEY, priv)));
+      
+      results.forEach((res, i) => {
+        if (res.status === 'fulfilled') {
+          console.log(`✅ [기기 ${i+1}] 발송 상태 코드: ${res.value}`);
+        } else {
+          console.error(`❌ [기기 ${i+1}] 발송 실패:`, res.reason);
+        }
+      });
+    } else {
+      console.warn('⚠️ 알림을 보낼 \'세인\' 프로필의 구독 정보를 찾을 수 없습니다.');
     }
   } catch (e: any) {
-    console.error('🔥 푸시 발송 오류:', e.message);
+    console.error('🔥 푸시 엔진 치명적 오류:', e.message);
   }
 }
 
@@ -285,12 +303,12 @@ export async function addReport(profileId: number | null, type: string, content:
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출 실패' }
   
-  // 리포트 제출 시 '세인'님에게만 알림 발송
-  await sendPushToSein({ 
+  // 비동기로 발송하고 에러 발생 시 로그만 출력
+  sendPushToSein({ 
     title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
     body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
     url: '/admin/reports' 
-  });
+  }).catch(e => console.error('🔥 푸시 비동기 발송 실패:', e));
   
   return { success: true };
 }

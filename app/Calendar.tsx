@@ -234,16 +234,20 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
             <div className="modal-buttons">
               {cards.map((card) => {
                 const color = card.color || '#cbd5e1'
+                // 실시간 history(현재 선택된 월)를 기반으로 남은 횟수 계산
+                const usedCount = history.filter(h => h.card_id === card.id).length
+                const remaining = Math.max(0, 3 - usedCount)
+                
                 return (
                   <button 
                     key={card.id} 
                     className="modal-use-button"
                     style={{ borderColor: color }}
                     onClick={() => handleUseCard(card.id)}
-                    disabled={loading || card.remaining_uses <= 0}
+                    disabled={loading || remaining <= 0}
                   >
                     <span className="button-user-name" style={{ color }}>{card.user_name}</span>
-                    <span className="button-remaining">({card.remaining_uses}회 남음)</span>
+                    <span className="button-remaining">({remaining}회 남음)</span>
                   </button>
                 )
               })}

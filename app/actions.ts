@@ -168,12 +168,12 @@ export async function deleteReport(id: number) {
 }
 
 // ---------------------------------------------------------
-// 웹푸시 마스터피스 로직 (iOS/Edge 완벽 대응)
+// 웹푸시 최종 완성형 로직 (iOS/Edge 완벽 호환)
 // ---------------------------------------------------------
 
 const b64 = {
   toBuf: (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
-  fromBuf: (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  fromBuf: (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 };
 
 async function encryptPayload(sub: any, payload: string) {
@@ -227,14 +227,18 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
 
   const encoder = new TextEncoder();
   const header = b64.fromBuf(encoder.encode(JSON.stringify({ alg: 'ES256', typ: 'JWT' })));
-  const body = b64.fromBuf(encoder.encode(JSON.stringify({ aud: origin, exp: Math.floor(Date.now()/1000)+43200, sub: 'mailto:admin@scparking.pages.dev' })));
+  const body = b64.fromBuf(encoder.encode(JSON.stringify({ 
+    aud: origin, 
+    exp: Math.floor(Date.now() / 1000) + 86400, 
+    sub: 'mailto:admin@scparking.pages.dev' 
+  })));
   const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' } as any, signingKey, encoder.encode(`${header}.${body}`) as any);
   const token = `${header}.${body}.${b64.fromBuf(new Uint8Array(sig))}`;
 
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'Authorization': `vapid t=${token}, k=${pub}`,
+      'Authorization': `vapid t=${token}, k=${pub.replace(/=/g, '')}`,
       'TTL': '86400',
       'Urgency': 'high',
       'apns-push-type': 'alert',
@@ -258,8 +262,14 @@ export async function addReport(profileId: number | null, type: string, content:
     const priv = process.env.VAPID_PRIVATE_KEY;
     if (pub && priv) {
       const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription');
-      const payload = JSON.stringify({ title: type === 'bug' ? '🐞 버그 제보' : '💡 기능 제안', body: content.substring(0, 50), url: '/' });
-      await Promise.allSettled(subs!.map((s: any) => sendPush(s.subscription, payload, pub, priv)));
+      if (subs && subs.length > 0) {
+        const payload = JSON.stringify({
+          title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 새로운 기능 제안',
+          body: content.length > 50 ? content.substring(0, 50) + '...' : content,
+          url: '/'
+        });
+        await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payload, pub, priv)));
+      }
     }
   } catch (e: any) { console.error('Push Error:', e.message); }
   return { success: true };

@@ -258,10 +258,7 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
 async function sendPushToSein(payload: { title: string; body: string; url: string }) {
   try {
     const priv = process.env.VAPID_PRIVATE_KEY;
-    if (!priv) {
-      console.error('❌ VAPID_PRIVATE_KEY is missing in process.env');
-      return { success: false, error: '비공개 키 없음' };
-    }
+    if (!priv) return { success: false, error: '비공개 키 없음' };
     
     const { data: subs, error } = await supabase
       .from('parking_push_subscriptions')
@@ -273,23 +270,18 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
     if (subs && subs.length > 0) {
       const payloadStr = JSON.stringify(payload);
       let successCount = 0;
-      
-      // 터미널과 동일하게 순차 루프로 발송 (안정성 확보)
       for (const s of subs) {
         try {
           const status = await sendPush(s.subscription, payloadStr, VAPID_PUBLIC_KEY, priv);
           if (status === 201) successCount++;
-          else console.warn(`⚠️ Push Status: ${status}`);
         } catch (e) {
-          console.error('기기 발송 오류:', e);
+          console.error('발송 오류:', e);
         }
       }
-      
       return { success: successCount > 0, count: successCount };
     }
     return { success: false, error: '구독 정보 없음' };
   } catch (e: any) {
-    console.error('🔥 Push Engine Exception:', e.message);
     return { success: false, error: e.message };
   }
 }
@@ -298,7 +290,6 @@ export async function addReport(profileId: number | null, type: string, content:
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출 실패' }
   
-  // 반드시 await 하여 결과를 기다림
   await sendPushToSein({ 
     title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
     body: content.length > 50 ? content.substring(0, 50) + '...' : content, 

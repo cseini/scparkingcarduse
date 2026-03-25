@@ -168,19 +168,15 @@ export async function deleteReport(id: number) {
 }
 
 // ---------------------------------------------------------
-// 웹푸시 최종 정석 로직 (터미널 성공 사례와 100% 일치화)
+// 웹푸시 최종 정석 로직 (Edge 환경에서의 Buffer 기반 구현)
 // ---------------------------------------------------------
 
 const VAPID_PUBLIC_KEY = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
 
+// Edge 환경에서 안전하게 작동하는 Buffer 기반 유틸리티
 const utils = {
-  toBuf: (s: string) => {
-    const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
-    const pad = b64.length % 4;
-    const padded = pad ? b64 + '='.repeat(4 - pad) : b64;
-    return Uint8Array.from(atob(padded), c => c.charCodeAt(0));
-  },
-  fromBuf: (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  toBuf: (s: string) => Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64'),
+  fromBuf: (b: Uint8Array) => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 };
 
 async function encryptPayload(sub: any, payload: string) {
@@ -205,20 +201,17 @@ async function encryptPayload(sub: any, payload: string) {
 
   const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
   const plainText = encoder.encode(payload);
-  const record = new Uint8Array(plainText.length + 1);
-  record.set(plainText, 0);
-  record.set([2], plainText.length);
+  const record = Buffer.concat([Buffer.from(plainText), Buffer.from([2])]);
 
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any, tagLength: 128 } as any, aesKey, record as any);
 
-  const result = new Uint8Array(21 + 65 + ciphertext.byteLength);
-  result.set(salt, 0);
-  result.set([0, 0, 16, 0], 16);
-  result.set([65], 20);
-  result.set(localPub, 21);
-  result.set(new Uint8Array(ciphertext), 86);
-
-  return result;
+  return Buffer.concat([
+    Buffer.from(salt),
+    Buffer.from([0, 0, 16, 0]),
+    Buffer.from([65]),
+    Buffer.from(localPub),
+    Buffer.from(ciphertext)
+  ]);
 }
 
 async function sendPush(sub: any, payload: string, pub: string, priv: string) {
@@ -257,7 +250,7 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
 
 async function sendPushToSein(payload: { title: string; body: string; url: string }) {
   try {
-    const priv = process.env.VAPID_PRIVATE_KEY;
+    const priv = (process.env.VAPID_PRIVATE_KEY || '').trim();
     if (!priv) return { success: false, error: '비공개 키 없음' };
     
     const { data: subs, error } = await supabase
@@ -269,6 +262,7 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
 
     if (subs && subs.length > 0) {
       const payloadStr = JSON.stringify(payload);
+      console.log(`📤 '세인'님 기기 ${subs.length}대에 전송 시작...`);
       const results = await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payloadStr, VAPID_PUBLIC_KEY, priv)));
       
       let successCount = 0;
@@ -288,6 +282,7 @@ export async function addReport(profileId: number | null, type: string, content:
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출 실패' }
   
+  // 반드시 대기
   await sendPushToSein({ 
     title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
     body: content.length > 50 ? content.substring(0, 50) + '...' : content, 

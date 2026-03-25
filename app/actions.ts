@@ -178,10 +178,7 @@ const utils = {
     const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
     const pad = b64.length % 4;
     const padded = pad ? b64 + '='.repeat(4 - pad) : b64;
-    const binary = atob(padded);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes;
+    return Uint8Array.from(atob(padded), c => c.charCodeAt(0));
   },
   fromBuf: (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 };

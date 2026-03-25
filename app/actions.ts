@@ -174,7 +174,12 @@ export async function deleteReport(id: number) {
 const VAPID_PUBLIC_KEY = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
 
 const utils = {
-  toBuf: (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
+  toBuf: (s: string) => {
+    const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4;
+    const padded = pad ? b64 + '='.repeat(4 - pad) : b64;
+    return Uint8Array.from(atob(padded), c => c.charCodeAt(0));
+  },
   fromBuf: (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 };
 
@@ -183,40 +188,33 @@ async function encryptPayload(sub: any, payload: string) {
   const p256dh = utils.toBuf(sub.keys.p256dh);
   const auth = utils.toBuf(sub.keys.auth);
 
-  // 1. ECDH Shared Secret
   const localKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   const localPub = new Uint8Array(await crypto.subtle.exportKey('raw', localKeys.publicKey));
   const remotePub = await crypto.subtle.importKey('raw', p256dh as any, { name: 'ECDH', namedCurve: 'P-256' } as any, false, []);
   const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: remotePub } as any, localKeys.privateKey, 256));
 
-  // 2. HKDF 유도 (RFC 8291 표준 절차 준수)
   const hkdf = async (ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, bits: number) => {
     const key = await crypto.subtle.importKey('raw', ikm as any, 'HKDF', false, ['deriveBits']);
     return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt as any, info: info as any } as any, key, bits));
   };
 
-  // IKM 유도: HKDF(salt=auth, ikm=sharedSecret, info="Content-Encoding: auth\0")
   const ikm = await hkdf(sharedSecret, auth, new Uint8Array([...encoder.encode('Content-Encoding: auth'), 0]), 256);
-
-  // Salt 및 CEK, IV 유도
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const cek = await hkdf(ikm, salt, new Uint8Array([...encoder.encode('Content-Encoding: aes128gcm'), 0]), 128);
   const iv = await hkdf(ikm, salt, new Uint8Array([...encoder.encode('Content-Encoding: nonce'), 0]), 96);
 
-  // 3. AES-128-GCM 암호화
   const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
   const plainText = encoder.encode(payload);
   const record = new Uint8Array(plainText.length + 1);
   record.set(plainText, 0);
-  record.set([2], plainText.length); // 0x02: Record delimiter
+  record.set([2], plainText.length);
 
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any, tagLength: 128 } as any, aesKey, record as any);
 
-  // 4. 바이너리 조립: salt(16) | rs(4) | idlen(1) | pubkey(65) | ciphertext
   const result = new Uint8Array(21 + 65 + ciphertext.byteLength);
   result.set(salt, 0);
-  result.set([0, 0, 16, 0], 16); // RS=4096
-  result.set([65], 20); // IDLen=65
+  result.set([0, 0, 16, 0], 16);
+  result.set([65], 20);
   result.set(localPub, 21);
   result.set(new Uint8Array(ciphertext), 86);
 
@@ -265,7 +263,7 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
     const priv = process.env.VAPID_PRIVATE_KEY;
     if (!priv) {
       console.error('❌ VAPID 비공개 키가 설정되지 않았습니다.');
-      return { success: false, error: 'VAPID 키 누락' };
+      return { success: false, error: '비공개 키 없음 (process.env.VAPID_PRIVATE_KEY)' };
     }
     
     const { data: subs, error } = await supabase
@@ -275,24 +273,26 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
 
     if (error) {
       console.error('❌ DB 조회 오류:', error.message);
-      return { success: false, error: error.message };
+      return { success: false, error: `DB 오류: ${error.message}` };
     }
 
     if (subs && subs.length > 0) {
       const payloadStr = JSON.stringify(payload);
+      console.log(`📤 '세인'님 기기 ${subs.length}대에 전송 시작...`);
       const results = await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payloadStr, VAPID_PUBLIC_KEY, priv)));
       
       let successCount = 0;
-      results.forEach((res) => {
+      results.forEach((res, i) => {
         if (res.status === 'fulfilled' && res.value === 201) successCount++;
+        else if (res.status === 'rejected') console.error(`❌ [기기 ${i+1}] 전송 실패:`, res.reason);
       });
       
       return { success: successCount > 0, count: successCount };
     }
-    return { success: false, error: '구독 정보 없음' };
+    return { success: false, error: '발송 대상(세인) 구독 정보 없음' };
   } catch (e: any) {
     console.error('🔥 푸시 엔진 오류:', e.message);
-    return { success: false, error: e.message };
+    return { success: false, error: `엔진 오류: ${e.message}` };
   }
 }
 
@@ -300,16 +300,21 @@ export async function addReport(profileId: number | null, type: string, content:
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출 실패' }
   
-  // [중요] 반드시 await 하여 결과를 기다림
-  const pushResult = await sendPushToSein({ 
-    title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
-    body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
-    url: '/admin/reports' 
-  });
-  
-  // 푸시 실패 시 로그만 남기되, 리포트 자체는 성공으로 반환
-  if (!pushResult.success) {
-    console.warn('⚠️ 푸시 발송 실패 원인:', pushResult.error);
+  // [핵심] await로 확실히 끝날 때까지 대기
+  try {
+    const pushResult = await sendPushToSein({ 
+      title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
+      body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
+      url: '/admin/reports' 
+    });
+    
+    if (!pushResult.success) {
+      console.warn('⚠️ 푸시 발송 결과:', pushResult.error);
+    } else {
+      console.log(`✅ 푸시 발송 성공 (${pushResult.count}대)`);
+    }
+  } catch (e: any) {
+    console.error('🔥 푸시 발송 중 예외 발생:', e.message);
   }
   
   return { success: true };

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import Cookies from 'js-cookie'
 import ProfileManagerModal from './ProfileManagerModal'
+import ThemeToggle from './ThemeToggle'
 import { checkProfilePin, setProfileCookieAction } from './actions'
 
 interface Profile {
@@ -121,14 +122,14 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
               <path d="M17 12H13.5V17H10.5V7H14.5C15.8807 7 17 8.11929 17 9.5V12ZM13.5 9.5V11.5H14.5C15.0523 11.5 15.5 11.0523 15.5 10.5C15.5 9.94772 15.0523 9.5 14.5 9.5H13.5Z" fill="white"/>
               <path opacity="0.3" d="M19 19L5 19" stroke="white" strokeWidth="2" strokeLinecap="round"/>
             </svg>
-            <span style={{ fontWeight: 900, color: '#1e293b', fontSize: '1.1rem', letterSpacing: '-0.02em' }}>SC PARKING</span>
+            <span style={{ fontWeight: 900, color: 'var(--text-strong)', fontSize: '1.1rem', letterSpacing: '-0.02em' }}>SC PARKING</span>
           </Link>
           
           <div className="header-actions">
             <div 
               className={`active-profile-card ${!activeName ? 'unselected' : ''}`} 
               onClick={() => setIsProfileModalOpen(true)}
-              style={!activeName ? { border: '1.5px dashed #cbd5e1', background: '#f1f5f9' } : {}}
+              style={!activeName ? { border: '1.5px dashed var(--border)', background: 'var(--item-bg)' } : {}}
             >
               {activeName ? (
                 <>
@@ -136,9 +137,11 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
                   <span className="profile-name-text">{activeName}</span>
                 </>
               ) : (
-                <span className="profile-name-text" style={{ color: '#64748b' }}>프로필 선택</span>
+                <span className="profile-name-text" style={{ color: 'var(--text-muted)' }}>프로필 선택</span>
               )}
             </div>
+
+            <ThemeToggle />
 
             <button className="hamburger" onClick={toggleMenu} aria-label="메뉴 열기">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -189,14 +192,14 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
               <h3 style={{ margin: 0 }}>프로필 선택</h3>
               <button 
                 onClick={() => { setIsProfileModalOpen(false); setIsManageModalOpen(true); }}
-                style={{ fontSize: '0.75rem', background: '#f1f5f9', border: '1px solid #cbd5e1', padding: '0.4rem 0.75rem', borderRadius: '0.5rem', cursor: 'pointer' }}
+                style={{ fontSize: '0.75rem', background: 'var(--item-bg)', border: '1px solid var(--border)', color: 'var(--foreground)', padding: '0.4rem 0.75rem', borderRadius: '0.5rem', cursor: 'pointer' }}
               >
                 관리
               </button>
             </div>
             
             {profiles.length === 0 ? (
-              <p style={{ color: '#64748b', padding: '1rem' }}>프로필이 없습니다. 관리에서 추가해 주세요.</p>
+              <p style={{ color: 'var(--text-muted)', padding: '1rem' }}>프로필이 없습니다. 관리에서 추가해 주세요.</p>
             ) : (
               <div className="profile-modal-grid">
                 {profiles.map(p => (
@@ -239,7 +242,7 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
                   textAlign: 'center', 
                   letterSpacing: '0.4rem', 
                   marginBottom: pinError ? '0.5rem' : '1.25rem',
-                  borderColor: pinError ? '#ef4444' : '#cbd5e1',
+                  borderColor: pinError ? '#ef4444' : 'var(--border)',
                   width: '100%',
                   padding: '0.5rem'
                 }}
@@ -266,6 +269,6 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
           onClose={() => setIsManageModalOpen(false)} 
         />
       )}
-      </>
-      )
-      }
+    </>
+  )
+}

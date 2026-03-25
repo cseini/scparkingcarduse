@@ -33,7 +33,21 @@ export default async function RootLayout({
   const selectedProfileId = cookieStore.get('selected_profile_id')?.value || '';
 
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{
+          __html: `
+            (function() {
+              try {
+                var theme = localStorage.getItem('theme');
+                var systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                var initialTheme = theme || systemTheme;
+                document.documentElement.setAttribute('data-theme', initialTheme);
+              } catch (e) {}
+            })();
+          `,
+        }} />
+      </head>
       <body className={inter.className}>
         <ToastProvider>
           <Navigation profiles={profiles} initialProfileId={selectedProfileId} />

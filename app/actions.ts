@@ -188,40 +188,33 @@ async function encryptPayload(sub: any, payload: string) {
   const p256dh = utils.toBuf(sub.keys.p256dh);
   const auth = utils.toBuf(sub.keys.auth);
 
-  // 1. ECDH Shared Secret 생성
   const localKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   const localPub = new Uint8Array(await crypto.subtle.exportKey('raw', localKeys.publicKey));
   const remotePub = await crypto.subtle.importKey('raw', p256dh as any, { name: 'ECDH', namedCurve: 'P-256' } as any, false, []);
   const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: remotePub } as any, localKeys.privateKey, 256));
 
-  // 2. HKDF 유틸리티 (TS 타입 에러 방지를 위해 as any 추가)
   const hkdf = async (ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, bits: number) => {
     const key = await crypto.subtle.importKey('raw', ikm as any, 'HKDF', false, ['deriveBits']);
     return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt as any, info: info as any } as any, key, bits));
   };
 
-  // 3. 터미널 성공 로직: Content-Encoding: auth 기반 IKM 유도
   const ikm = await hkdf(sharedSecret, auth, new Uint8Array([...encoder.encode('Content-Encoding: auth'), 0]), 256);
-  
-  // Salt 생성 및 CEK, IV 유도
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const cek = await hkdf(ikm, salt, new Uint8Array([...encoder.encode('Content-Encoding: aes128gcm'), 0]), 128);
   const iv = await hkdf(ikm, salt, new Uint8Array([...encoder.encode('Content-Encoding: nonce'), 0]), 96);
 
-  // 4. AES-128-GCM 암호화
   const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
   const plainText = encoder.encode(payload);
   const record = new Uint8Array(plainText.length + 1);
   record.set(plainText, 0);
-  record.set([2], plainText.length); // Delimiter
+  record.set([2], plainText.length);
 
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any, tagLength: 128 } as any, aesKey, record as any);
 
-  // 5. 바이너리 조립
   const result = new Uint8Array(21 + 65 + ciphertext.byteLength);
   result.set(salt, 0);
-  result.set([0, 0, 16, 0], 16); // RS=4096
-  result.set([65], 20); // IDLen=65
+  result.set([0, 0, 16, 0], 16);
+  result.set([65], 20);
   result.set(localPub, 21);
   result.set(new Uint8Array(ciphertext), 86);
 
@@ -262,13 +255,16 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
   return response.status;
 }
 
-/**
- * '세인' 프로필로 등록된 구독자에게만 푸시 알림을 발송합니다.
- */
 async function sendPushToSein(payload: { title: string; body: string; url: string }) {
   try {
     const priv = process.env.VAPID_PRIVATE_KEY;
-    if (!priv) return { success: false, error: '비공개 키 없음' };
+    if (!priv) {
+      console.log('--- ENV CHECK START ---');
+      console.log('VAPID_PRIVATE_KEY is MISSING in process.env');
+      console.log('Available keys:', Object.keys(process.env).join(', '));
+      console.log('--- ENV CHECK END ---');
+      return { success: false, error: '비공개 키 누락' };
+    }
     
     const { data: subs, error } = await supabase
       .from('parking_push_subscriptions')
@@ -295,14 +291,27 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
 }
 
 export async function addReport(profileId: number | null, type: string, content: string) {
+  // [DEBUG] 시작 로그
+  console.log(`[REPORT] Submission started. Profile: ${profileId}, Type: ${type}`);
+
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출 실패' }
   
-  await sendPushToSein({ 
-    title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
-    body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
-    url: '/admin/reports' 
-  });
+  // [DEBUG] 푸시 시도 전 로그
+  console.log('[PUSH] Attempting to send notification to Sein...');
+
+  try {
+    const pushResult = await sendPushToSein({ 
+      title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
+      body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
+      url: '/admin/reports' 
+    });
+    
+    // [DEBUG] 결과 로그
+    console.log(`[PUSH] Final Result: ${JSON.stringify(pushResult)}`);
+  } catch (e: any) {
+    console.log(`[PUSH] CRITICAL EXCEPTION: ${e.message}`);
+  }
   
   return { success: true };
 }

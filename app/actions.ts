@@ -267,7 +267,8 @@ export async function addReport(profileId: number | null, type: string, content:
 
 export async function saveSubscription(profileId: number | null, subscription: any) {
   const { error } = await supabase.from('parking_push_subscriptions').insert({ profile_id: profileId, subscription })
-  return { success: !error };
+  if (error) return { success: false, error: '알림 설정 저장 실패' }
+  return { success: true }
 }
 
 export async function checkAutoReset(profileId: number) { return; }

@@ -257,8 +257,11 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
 
 async function sendPushToSein(payload: { title: string; body: string; url: string }) {
   try {
-    const priv = (process.env.VAPID_PRIVATE_KEY || '').trim();
-    if (!priv) return { success: false, error: '비공개 키 없음' };
+    const priv = process.env.VAPID_PRIVATE_KEY;
+    if (!priv) {
+      console.error('❌ VAPID_PRIVATE_KEY is missing in process.env');
+      return { success: false, error: '비공개 키 없음' };
+    }
     
     const { data: subs, error } = await supabase
       .from('parking_push_subscriptions')
@@ -276,6 +279,7 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
         try {
           const status = await sendPush(s.subscription, payloadStr, VAPID_PUBLIC_KEY, priv);
           if (status === 201) successCount++;
+          else console.warn(`⚠️ Push Status: ${status}`);
         } catch (e) {
           console.error('기기 발송 오류:', e);
         }
@@ -285,6 +289,7 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
     }
     return { success: false, error: '구독 정보 없음' };
   } catch (e: any) {
+    console.error('🔥 Push Engine Exception:', e.message);
     return { success: false, error: e.message };
   }
 }

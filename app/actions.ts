@@ -168,10 +168,10 @@ export async function deleteReport(id: number) {
 }
 
 // ---------------------------------------------------------
-// 웹푸시 최종 완성형 로직 (iOS/Edge 완벽 호환)
+// 웹푸시 최종 정석 로직 (iOS/Edge 완벽 호환)
 // ---------------------------------------------------------
 
-const b64 = {
+const utils = {
   toBuf: (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
   fromBuf: (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 };
@@ -180,8 +180,8 @@ async function encryptPayload(sub: any, payload: string) {
   const encoder = new TextEncoder();
   const serverKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   const serverPub = new Uint8Array(await crypto.subtle.exportKey('raw', serverKeys.publicKey));
-  const clientPub = b64.toBuf(sub.keys.p256dh);
-  const clientAuth = b64.toBuf(sub.keys.auth);
+  const clientPub = utils.toBuf(sub.keys.p256dh);
+  const clientAuth = utils.toBuf(sub.keys.auth);
 
   const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({
     name: 'ECDH', public: await crypto.subtle.importKey('raw', clientPub as any, { name: 'ECDH', namedCurve: 'P-256' } as any, false, [])
@@ -202,8 +202,8 @@ async function encryptPayload(sub: any, payload: string) {
   data.set(plainText, 0);
   data.set([2], plainText.length);
 
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any, tagLength: 128 } as any, 
-    await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']), data as any);
+  const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any, tagLength: 128 } as any, aesKey, data as any);
 
   const result = new Uint8Array(21 + 65 + encrypted.byteLength);
   result.set(salt, 0);
@@ -220,20 +220,20 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
   
   const signingKey = await crypto.subtle.importKey('jwk', {
     kty: 'EC', crv: 'P-256', ext: true,
-    x: b64.fromBuf(b64.toBuf(pub).slice(1, 33)),
-    y: b64.fromBuf(b64.toBuf(pub).slice(33, 65)),
-    d: b64.fromBuf(b64.toBuf(priv))
+    x: utils.fromBuf(utils.toBuf(pub).slice(1, 33)),
+    y: utils.fromBuf(utils.toBuf(pub).slice(33, 65)),
+    d: utils.fromBuf(utils.toBuf(priv))
   } as any, { name: 'ECDSA', namedCurve: 'P-256' } as any, false, ['sign']);
 
   const encoder = new TextEncoder();
-  const header = b64.fromBuf(encoder.encode(JSON.stringify({ alg: 'ES256', typ: 'JWT' })));
-  const body = b64.fromBuf(encoder.encode(JSON.stringify({ 
+  const header = utils.fromBuf(encoder.encode(JSON.stringify({ alg: 'ES256', typ: 'JWT' })));
+  const body = utils.fromBuf(encoder.encode(JSON.stringify({ 
     aud: origin, 
     exp: Math.floor(Date.now() / 1000) + 86400, 
-    sub: 'mailto:admin@scparking.pages.dev' 
+    sub: 'mailto:test@example.com' 
   })));
   const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' } as any, signingKey, encoder.encode(`${header}.${body}`) as any);
-  const token = `${header}.${body}.${b64.fromBuf(new Uint8Array(sig))}`;
+  const token = `${header}.${body}.${utils.fromBuf(new Uint8Array(sig))}`;
 
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -249,7 +249,6 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
     body: await encryptPayload(sub, payload)
   });
 
-  if (!response.ok) throw new Error(`Apple Error ${response.status}: ${await response.text()}`);
   return response.status;
 }
 
@@ -263,15 +262,16 @@ export async function addReport(profileId: number | null, type: string, content:
     if (pub && priv) {
       const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription');
       if (subs && subs.length > 0) {
-        const payload = JSON.stringify({
-          title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 새로운 기능 제안',
-          body: content.length > 50 ? content.substring(0, 50) + '...' : content,
-          url: '/'
+        const payload = JSON.stringify({ title: type === 'bug' ? '🐞 버그 제보' : '💡 기능 제안', body: content.substring(0, 50), url: '/' });
+        console.log(`🚀 Sending to ${subs.length} devices...`);
+        const results = await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payload, pub, priv)));
+        results.forEach((res, i) => {
+          if (res.status === 'fulfilled') console.log(`✅ [${i}] Status: ${res.value}`);
+          else console.error(`❌ [${i}] Error:`, res.reason);
         });
-        await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payload, pub, priv)));
       }
     }
-  } catch (e: any) { console.error('Push Error:', e.message); }
+  } catch (e: any) { console.error('🔥 Fatal Push Error:', e.message); }
   return { success: true };
 }
 

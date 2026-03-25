@@ -191,13 +191,13 @@ async function encryptPayload(sub: any, payload: string) {
   // 1. ECDH Shared Secret 생성
   const localKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   const localPub = new Uint8Array(await crypto.subtle.exportKey('raw', localKeys.publicKey));
-  const remotePub = await crypto.subtle.importKey('raw', p256dh, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
-  const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: remotePub }, localKeys.privateKey, 256));
+  const remotePub = await crypto.subtle.importKey('raw', p256dh as any, { name: 'ECDH', namedCurve: 'P-256' } as any, false, []);
+  const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: remotePub } as any, localKeys.privateKey, 256));
 
-  // 2. HKDF 유틸리티
+  // 2. HKDF 유틸리티 (TS 타입 에러 방지를 위해 as any 추가)
   const hkdf = async (ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, bits: number) => {
-    const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
-    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info } as any, key, bits));
+    const key = await crypto.subtle.importKey('raw', ikm as any, 'HKDF', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt as any, info: info as any } as any, key, bits));
   };
 
   // 3. 터미널 성공 로직: Content-Encoding: auth 기반 IKM 유도
@@ -209,13 +209,13 @@ async function encryptPayload(sub: any, payload: string) {
   const iv = await hkdf(ikm, salt, new Uint8Array([...encoder.encode('Content-Encoding: nonce'), 0]), 96);
 
   // 4. AES-128-GCM 암호화
-  const aesKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+  const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
   const plainText = encoder.encode(payload);
   const record = new Uint8Array(plainText.length + 1);
   record.set(plainText, 0);
   record.set([2], plainText.length); // Delimiter
 
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, tagLength: 128 }, aesKey, record);
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any, tagLength: 128 } as any, aesKey, record as any);
 
   // 5. 바이너리 조립
   const result = new Uint8Array(21 + 65 + ciphertext.byteLength);
@@ -279,7 +279,6 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
 
     if (subs && subs.length > 0) {
       const payloadStr = JSON.stringify(payload);
-      console.log(`📤 '세인'님 기기 ${subs.length}대에 전송 시작 (성공 로직 롤백)...`);
       const results = await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payloadStr, VAPID_PUBLIC_KEY, priv)));
       
       let successCount = 0;

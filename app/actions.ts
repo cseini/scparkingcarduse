@@ -264,38 +264,35 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
   try {
     const priv = process.env.VAPID_PRIVATE_KEY;
     if (!priv) {
-      console.error('❌ VAPID 비공개 키가 설정되지 않았습니다. 환경 변수를 확인하세요.');
-      return;
+      console.error('❌ VAPID 비공개 키가 설정되지 않았습니다.');
+      return { success: false, error: 'VAPID 키 누락' };
     }
     
-    // [핵심] 쿼리 로그 강화
     const { data: subs, error } = await supabase
       .from('parking_push_subscriptions')
       .select('subscription, profiles!inner(name)')
       .eq('profiles.name', '세인');
 
     if (error) {
-      console.error('❌ DB 구독 정보 조회 중 오류:', error.message);
-      return;
+      console.error('❌ DB 조회 오류:', error.message);
+      return { success: false, error: error.message };
     }
 
     if (subs && subs.length > 0) {
       const payloadStr = JSON.stringify(payload);
-      console.log(`📤 '세인'님(기기 ${subs.length}대)에게 푸시 발송 시도...`);
       const results = await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payloadStr, VAPID_PUBLIC_KEY, priv)));
       
-      results.forEach((res, i) => {
-        if (res.status === 'fulfilled') {
-          console.log(`✅ [기기 ${i+1}] 발송 상태 코드: ${res.value}`);
-        } else {
-          console.error(`❌ [기기 ${i+1}] 발송 실패:`, res.reason);
-        }
+      let successCount = 0;
+      results.forEach((res) => {
+        if (res.status === 'fulfilled' && res.value === 201) successCount++;
       });
-    } else {
-      console.warn('⚠️ 알림을 보낼 \'세인\' 프로필의 구독 정보를 찾을 수 없습니다.');
+      
+      return { success: successCount > 0, count: successCount };
     }
+    return { success: false, error: '구독 정보 없음' };
   } catch (e: any) {
-    console.error('🔥 푸시 엔진 치명적 오류:', e.message);
+    console.error('🔥 푸시 엔진 오류:', e.message);
+    return { success: false, error: e.message };
   }
 }
 
@@ -303,12 +300,17 @@ export async function addReport(profileId: number | null, type: string, content:
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출 실패' }
   
-  // 비동기로 발송하고 에러 발생 시 로그만 출력
-  sendPushToSein({ 
+  // [중요] 반드시 await 하여 결과를 기다림
+  const pushResult = await sendPushToSein({ 
     title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
     body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
     url: '/admin/reports' 
-  }).catch(e => console.error('🔥 푸시 비동기 발송 실패:', e));
+  });
+  
+  // 푸시 실패 시 로그만 남기되, 리포트 자체는 성공으로 반환
+  if (!pushResult.success) {
+    console.warn('⚠️ 푸시 발송 실패 원인:', pushResult.error);
+  }
   
   return { success: true };
 }

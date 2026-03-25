@@ -168,7 +168,7 @@ export async function deleteReport(id: number) {
 }
 
 // ---------------------------------------------------------
-// 웹푸시 최종 정석 로직 (RFC 8291 완벽 대응)
+// 웹푸시 최종 정석 로직 (터미널 성공 사례와 100% 일치화)
 // ---------------------------------------------------------
 
 const VAPID_PUBLIC_KEY = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
@@ -200,20 +200,9 @@ async function encryptPayload(sub: any, payload: string) {
     return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info } as any, key, bits));
   };
 
-  // 3. RFC 8291 표준에 따른 키 유도 (PRK -> IKM -> CEK/IV)
-  // PRK = HKDF-Extract(auth_secret, ecdh_secret)
-  const prk = await hkdf(sharedSecret, auth, new Uint8Array(0), 256);
+  // 3. 터미널 성공 로직: Content-Encoding: auth 기반 IKM 유도
+  const ikm = await hkdf(sharedSecret, auth, new Uint8Array([...encoder.encode('Content-Encoding: auth'), 0]), 256);
   
-  // Info 생성: "WebPush: info\0" || receiver_pubkey || sender_pubkey
-  const info = new Uint8Array([
-    ...encoder.encode('WebPush: info'), 0,
-    ...p256dh,
-    ...localPub
-  ]);
-  
-  // IKM 유도
-  const ikm = await hkdf(prk, new Uint8Array(0), info, 256);
-
   // Salt 생성 및 CEK, IV 유도
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const cek = await hkdf(ikm, salt, new Uint8Array([...encoder.encode('Content-Encoding: aes128gcm'), 0]), 128);
@@ -224,11 +213,11 @@ async function encryptPayload(sub: any, payload: string) {
   const plainText = encoder.encode(payload);
   const record = new Uint8Array(plainText.length + 1);
   record.set(plainText, 0);
-  record.set([2], plainText.length); // Padding delimiter 0x02
+  record.set([2], plainText.length); // Delimiter
 
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, tagLength: 128 }, aesKey, record);
 
-  // 5. 바이너리 조립: salt(16) | rs(4) | idlen(1) | pubkey(65) | ciphertext
+  // 5. 바이너리 조립
   const result = new Uint8Array(21 + 65 + ciphertext.byteLength);
   result.set(salt, 0);
   result.set([0, 0, 16, 0], 16); // RS=4096
@@ -279,43 +268,29 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
 async function sendPushToSein(payload: { title: string; body: string; url: string }) {
   try {
     const priv = process.env.VAPID_PRIVATE_KEY;
-    if (!priv) {
-      console.error('❌ VAPID 비공개 키가 설정되지 않았습니다.');
-      return { success: false, error: '비공개 키 없음' };
-    }
+    if (!priv) return { success: false, error: '비공개 키 없음' };
     
     const { data: subs, error } = await supabase
       .from('parking_push_subscriptions')
       .select('subscription, profiles!inner(name)')
       .eq('profiles.name', '세인');
 
-    if (error) {
-      console.error('❌ DB 조회 오류:', error.message);
-      return { success: false, error: error.message };
-    }
+    if (error) return { success: false, error: error.message };
 
     if (subs && subs.length > 0) {
       const payloadStr = JSON.stringify(payload);
-      console.log(`📤 '세인'님 기기 ${subs.length}대에 전송 시작 (RFC 8291 로직)...`);
+      console.log(`📤 '세인'님 기기 ${subs.length}대에 전송 시작 (성공 로직 롤백)...`);
       const results = await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payloadStr, VAPID_PUBLIC_KEY, priv)));
       
       let successCount = 0;
-      results.forEach((res, i) => {
-        if (res.status === 'fulfilled' && res.value === 201) {
-          successCount++;
-        } else if (res.status === 'rejected') {
-          console.error(`❌ [기기 ${i+1}] 전송 실패:`, res.reason);
-        } else {
-          // @ts-ignore
-          console.warn(`⚠️ [기기 ${i+1}] 응답 코드: ${res.value}`);
-        }
+      results.forEach((res) => {
+        if (res.status === 'fulfilled' && res.value === 201) successCount++;
       });
       
       return { success: successCount > 0, count: successCount };
     }
     return { success: false, error: '구독 정보 없음' };
   } catch (e: any) {
-    console.error('🔥 푸시 엔진 오류:', e.message);
     return { success: false, error: e.message };
   }
 }
@@ -324,20 +299,11 @@ export async function addReport(profileId: number | null, type: string, content:
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출 실패' }
   
-  // [중요] 비동기 예외가 발생하지 않도록 조심하며 대기
-  try {
-    const pushResult = await sendPushToSein({ 
-      title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
-      body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
-      url: '/admin/reports' 
-    });
-    
-    if (!pushResult.success) {
-      console.warn('⚠️ 푸시 발송 결과:', pushResult.error);
-    }
-  } catch (e: any) {
-    console.error('🔥 리포트 제출 중 푸시 발송 실패:', e.message);
-  }
+  await sendPushToSein({ 
+    title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
+    body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
+    url: '/admin/reports' 
+  });
   
   return { success: true };
 }

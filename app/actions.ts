@@ -178,7 +178,10 @@ const utils = {
     const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
     const pad = b64.length % 4;
     const padded = pad ? b64 + '='.repeat(4 - pad) : b64;
-    return Uint8Array.from(atob(padded), c => c.charCodeAt(0));
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
   },
   fromBuf: (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 };
@@ -258,13 +261,7 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
 async function sendPushToSein(payload: { title: string; body: string; url: string }) {
   try {
     const priv = process.env.VAPID_PRIVATE_KEY;
-    if (!priv) {
-      console.log('--- ENV CHECK START ---');
-      console.log('VAPID_PRIVATE_KEY is MISSING in process.env');
-      console.log('Available keys:', Object.keys(process.env).join(', '));
-      console.log('--- ENV CHECK END ---');
-      return { success: false, error: '비공개 키 누락' };
-    }
+    if (!priv) return { success: false, error: '비공개 키 없음' };
     
     const { data: subs, error } = await supabase
       .from('parking_push_subscriptions')
@@ -291,27 +288,14 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
 }
 
 export async function addReport(profileId: number | null, type: string, content: string) {
-  // [DEBUG] 시작 로그
-  console.log(`[REPORT] Submission started. Profile: ${profileId}, Type: ${type}`);
-
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출 실패' }
   
-  // [DEBUG] 푸시 시도 전 로그
-  console.log('[PUSH] Attempting to send notification to Sein...');
-
-  try {
-    const pushResult = await sendPushToSein({ 
-      title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
-      body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
-      url: '/admin/reports' 
-    });
-    
-    // [DEBUG] 결과 로그
-    console.log(`[PUSH] Final Result: ${JSON.stringify(pushResult)}`);
-  } catch (e: any) {
-    console.log(`[PUSH] CRITICAL EXCEPTION: ${e.message}`);
-  }
+  await sendPushToSein({ 
+    title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
+    body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
+    url: '/admin/reports' 
+  });
   
   return { success: true };
 }

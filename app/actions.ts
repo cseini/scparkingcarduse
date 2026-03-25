@@ -178,10 +178,7 @@ const utils = {
     const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
     const pad = b64.length % 4;
     const padded = pad ? b64 + '='.repeat(4 - pad) : b64;
-    const binary = atob(padded);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes;
+    return Uint8Array.from(atob(padded), c => c.charCodeAt(0));
   },
   fromBuf: (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 };
@@ -272,24 +269,22 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
 
     if (subs && subs.length > 0) {
       const payloadStr = JSON.stringify(payload);
-      console.log(`📤 '세인'님 기기 ${subs.length}대에 전송 시작...`);
-      const results = await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payloadStr, VAPID_PUBLIC_KEY, priv)));
-      
       let successCount = 0;
-      results.forEach((res, i) => {
-        if (res.status === 'fulfilled' && res.value === 201) {
-          successCount++;
-        } else {
-          console.error(`❌ [기기 ${i+1}] 발송 실패:`, res.status === 'rejected' ? res.reason : res.value);
-        }
-      });
       
-      console.log(`✅ 최종 발송 결과: 성공 ${successCount}대 / 총 ${subs.length}대`);
+      // 터미널과 동일하게 순차 루프로 발송 (안정성)
+      for (const s of subs) {
+        try {
+          const status = await sendPush(s.subscription, payloadStr, VAPID_PUBLIC_KEY, priv);
+          if (status === 201) successCount++;
+        } catch (e) {
+          console.error('기기 발송 오류:', e);
+        }
+      }
+      
       return { success: successCount > 0, count: successCount };
     }
     return { success: false, error: '구독 정보 없음' };
   } catch (e: any) {
-    console.error('🔥 푸시 엔진 예외:', e.message);
     return { success: false, error: e.message };
   }
 }
@@ -298,7 +293,6 @@ export async function addReport(profileId: number | null, type: string, content:
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출 실패' }
   
-  // 반드시 await 하여 결과를 기다림
   await sendPushToSein({ 
     title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
     body: content.length > 50 ? content.substring(0, 50) + '...' : content, 

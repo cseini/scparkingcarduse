@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { 
   format, 
   startOfMonth, 
@@ -54,23 +54,35 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
 
   const { showToast } = useToast()
 
-  // Sync history if initialHistory changes (e.g. on profile switch)
+  // Helper to refresh history manually for smooth updates
+  const refreshHistory = useCallback(async () => {
+    if (cards.length > 0 && cards[0].profile_id) {
+      const year = currentMonth.getFullYear()
+      const month = currentMonth.getMonth() + 1
+      const data = await getUsageHistory(year, month, cards[0].profile_id)
+      setHistory(data)
+    }
+  }, [currentMonth, cards])
+
+  // Sync history if initialHistory changes (e.g. on profile switch), but only if it's the current real month
   useEffect(() => {
-    setHistory(initialHistory)
-  }, [initialHistory])
+    const now = new Date()
+    const isViewingCurrentMonth = currentMonth.getFullYear() === now.getFullYear() && currentMonth.getMonth() === now.getMonth()
+    if (isViewingCurrentMonth) {
+      setHistory(initialHistory)
+    }
+  }, [initialHistory, currentMonth])
 
   // Fetch history when currentMonth changes
   useEffect(() => {
-    const fetchHistory = async () => {
-      if (cards.length > 0 && cards[0].profile_id) {
-        const year = currentMonth.getFullYear()
-        const month = currentMonth.getMonth() + 1
-        const data = await getUsageHistory(year, month, cards[0].profile_id)
-        setHistory(data)
-      }
+    // We only need to fetch if it's NOT the initial sync already handled
+    const now = new Date()
+    const isCurrentRealMonth = currentMonth.getFullYear() === now.getFullYear() && currentMonth.getMonth() === now.getMonth()
+    
+    if (!isCurrentRealMonth) {
+      refreshHistory()
     }
-    fetchHistory()
-  }, [currentMonth, cards])
+  }, [currentMonth, refreshHistory])
 
   // Auto-reset check when viewing calendar
   useEffect(() => {
@@ -98,9 +110,7 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
   }
 
   const handleDateClick = (day: Date) => {
-    // 현재 월이 아닌 경우 클릭 무시
     if (!isSameDay(startOfMonth(day), monthStart)) return;
-    
     setSelectedDate(day)
     setIsModalOpen(true)
   }
@@ -122,6 +132,8 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
       } else {
         showToast('사용 기록이 저장되었습니다. ✨', 'success')
         setIsModalOpen(false)
+        // Immediately refresh local history for a smooth transition
+        await refreshHistory()
       }
     } catch (err) {
       console.error(err)
@@ -143,6 +155,8 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
         showToast('기록이 삭제되었습니다.', 'success')
         setIsEditModalOpen(false)
         setSelectedHistory(null)
+        // Immediately refresh local history for a smooth transition
+        await refreshHistory()
       }
     } catch (err) {
       console.error('[Client] 삭제 중 에러 발생:', err)
@@ -157,7 +171,6 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
       <div className="card-grid">
         {cards.map((card) => {
           const color = card.color || '#cbd5e1'
-          // 현재 history(선택된 월의 이력)에서 해당 카드의 사용 횟수 계산
           const usedCount = history.filter(h => h.card_id === card.id).length
           const remaining = Math.max(0, 3 - usedCount)
           
@@ -168,7 +181,17 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
               style={{ borderColor: color, backgroundColor: `${color}10` }}
             >
               <h3 className="user-name" style={{ color }}>{card.user_name}</h3>
-              <div className="remaining" style={{ color }}>{remaining}</div>
+              <div 
+                className="remaining" 
+                style={{ 
+                  color, 
+                  transition: 'all 0.3s ease',
+                  transform: loading ? 'scale(0.95)' : 'scale(1)',
+                  opacity: loading ? 0.7 : 1
+                }}
+              >
+                {remaining}
+              </div>
               <div className="remaining-label">회 남음</div>
             </div>
           )
@@ -234,7 +257,6 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
             <div className="modal-buttons">
               {cards.map((card) => {
                 const color = card.color || '#cbd5e1'
-                // 실시간 history(현재 선택된 월)를 기반으로 남은 횟수 계산
                 const usedCount = history.filter(h => h.card_id === card.id).length
                 const remaining = Math.max(0, 3 - usedCount)
                 
@@ -247,7 +269,9 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
                     disabled={loading || remaining <= 0}
                   >
                     <span className="button-user-name" style={{ color }}>{card.user_name}</span>
-                    <span className="button-remaining">({remaining}회 남음)</span>
+                    <span className="button-remaining" style={{ transition: 'all 0.3s ease' }}>
+                      ({remaining}회 남음)
+                    </span>
                   </button>
                 )
               })}

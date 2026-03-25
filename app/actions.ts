@@ -168,15 +168,22 @@ export async function deleteReport(id: number) {
 }
 
 // ---------------------------------------------------------
-// 웹푸시 최종 정석 로직 (Edge 환경에서의 Buffer 기반 구현)
+// 웹푸시 최종 정석 로직 (터미널 성공 사례와 100% 일치화)
 // ---------------------------------------------------------
 
 const VAPID_PUBLIC_KEY = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
 
-// Edge 환경에서 안전하게 작동하는 Buffer 기반 유틸리티
 const utils = {
-  toBuf: (s: string) => Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64'),
-  fromBuf: (b: Uint8Array) => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  toBuf: (s: string) => {
+    const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4;
+    const padded = pad ? b64 + '='.repeat(4 - pad) : b64;
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  },
+  fromBuf: (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 };
 
 async function encryptPayload(sub: any, payload: string) {
@@ -201,17 +208,20 @@ async function encryptPayload(sub: any, payload: string) {
 
   const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
   const plainText = encoder.encode(payload);
-  const record = Buffer.concat([Buffer.from(plainText), Buffer.from([2])]);
+  const record = new Uint8Array(plainText.length + 1);
+  record.set(plainText, 0);
+  record.set([2], plainText.length);
 
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any, tagLength: 128 } as any, aesKey, record as any);
 
-  return Buffer.concat([
-    Buffer.from(salt),
-    Buffer.from([0, 0, 16, 0]),
-    Buffer.from([65]),
-    Buffer.from(localPub),
-    Buffer.from(ciphertext)
-  ]);
+  const result = new Uint8Array(21 + 65 + ciphertext.byteLength);
+  result.set(salt, 0);
+  result.set([0, 0, 16, 0], 16);
+  result.set([65], 20);
+  result.set(localPub, 21);
+  result.set(new Uint8Array(ciphertext), 86);
+
+  return result;
 }
 
 async function sendPush(sub: any, payload: string, pub: string, priv: string) {
@@ -250,7 +260,7 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
 
 async function sendPushToSein(payload: { title: string; body: string; url: string }) {
   try {
-    const priv = (process.env.VAPID_PRIVATE_KEY || '').trim();
+    const priv = process.env.VAPID_PRIVATE_KEY;
     if (!priv) return { success: false, error: '비공개 키 없음' };
     
     const { data: subs, error } = await supabase
@@ -266,14 +276,20 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
       const results = await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payloadStr, VAPID_PUBLIC_KEY, priv)));
       
       let successCount = 0;
-      results.forEach((res) => {
-        if (res.status === 'fulfilled' && res.value === 201) successCount++;
+      results.forEach((res, i) => {
+        if (res.status === 'fulfilled' && res.value === 201) {
+          successCount++;
+        } else {
+          console.error(`❌ [기기 ${i+1}] 발송 실패:`, res.status === 'rejected' ? res.reason : res.value);
+        }
       });
       
+      console.log(`✅ 최종 발송 결과: 성공 ${successCount}대 / 총 ${subs.length}대`);
       return { success: successCount > 0, count: successCount };
     }
     return { success: false, error: '구독 정보 없음' };
   } catch (e: any) {
+    console.error('🔥 푸시 엔진 예외:', e.message);
     return { success: false, error: e.message };
   }
 }
@@ -282,7 +298,7 @@ export async function addReport(profileId: number | null, type: string, content:
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출 실패' }
   
-  // 반드시 대기
+  // 반드시 await 하여 결과를 기다림
   await sendPushToSein({ 
     title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
     body: content.length > 50 ? content.substring(0, 50) + '...' : content, 

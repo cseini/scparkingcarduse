@@ -171,7 +171,7 @@ export async function deleteReport(id: number) {
 // 웹푸시 최종 무결성 로직 (로컬 web-push 라이브러리와 100% 동일한 결과물)
 // ---------------------------------------------------------
 
-const cryptoUtils = {
+const b64 = {
   toBuf: (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
   fromBuf: (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 };
@@ -179,13 +179,13 @@ const cryptoUtils = {
 async function encryptPayload(sub: any, payload: string) {
   const encoder = new TextEncoder();
   const serverKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
-  const serverPub = new Uint8Array(await crypto.subtle.exportKey('raw', localKeysToPublic(serverKeys)));
-  const clientPub = cryptoUtils.toBuf(sub.keys.p256dh);
-  const clientAuth = cryptoUtils.toBuf(sub.keys.auth);
+  const serverPub = new Uint8Array(await crypto.subtle.exportKey('raw', serverKeys.publicKey));
+  const clientPub = b64.toBuf(sub.keys.p256dh);
+  const clientAuth = b64.toBuf(sub.keys.auth);
 
   const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({
     name: 'ECDH', public: await crypto.subtle.importKey('raw', clientPub as any, { name: 'ECDH', namedCurve: 'P-256' } as any, false, [])
-  } as any, (serverKeys as any).privateKey, 256));
+  } as any, serverKeys.privateKey, 256));
 
   const hkdf = async (ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, bits: number) => {
     const key = await crypto.subtle.importKey('raw', ikm as any, 'HKDF', false, ['deriveBits']);
@@ -201,47 +201,45 @@ async function encryptPayload(sub: any, payload: string) {
   const plainText = encoder.encode(payload);
   const data = new Uint8Array(plainText.length + 1);
   data.set(plainText, 0);
-  data.set([2], plainText.length); // aes128gcm delimiter
+  data.set([2], plainText.length); // Record delimiter
 
   const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
   const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any, tagLength: 128 } as any, aesKey, data as any);
 
   const result = new Uint8Array(21 + 65 + encrypted.byteLength);
   result.set(salt, 0);
-  result.set([0, 0, 16, 0], 16); // Big-Endian 4096
+  result.set([0, 0, 16, 0], 16); // big-endian 4096
   result.set([65], 20);
   result.set(serverPub, 21);
   result.set(new Uint8Array(encrypted), 86);
   return result;
 }
 
-function localKeysToPublic(keys: any) { return keys.publicKey; }
-
 async function sendPush(sub: any, payload: string, pub: string, priv: string) {
   const endpoint = sub.endpoint;
-  const url = new URL(endpoint);
+  const origin = new URL(endpoint).origin;
   
   const signingKey = await crypto.subtle.importKey('jwk', {
     kty: 'EC', crv: 'P-256', ext: true,
-    x: cryptoUtils.fromBuf(cryptoUtils.toBuf(pub).slice(1, 33)),
-    y: cryptoUtils.fromBuf(cryptoUtils.toBuf(pub).slice(33, 65)),
-    d: cryptoUtils.fromBuf(cryptoUtils.toBuf(priv))
+    x: b64.fromBuf(b64.toBuf(pub).slice(1, 33)),
+    y: b64.fromBuf(b64.toBuf(pub).slice(33, 65)),
+    d: b64.fromBuf(b64.toBuf(priv))
   } as any, { name: 'ECDSA', namedCurve: 'P-256' } as any, false, ['sign']);
 
   const encoder = new TextEncoder();
-  const header = cryptoUtils.fromBuf(encoder.encode(JSON.stringify({ alg: 'ES256', typ: 'JWT' })));
-  const body = cryptoUtils.fromBuf(encoder.encode(JSON.stringify({ 
-    aud: url.origin, 
-    exp: Math.floor(Date.now() / 1000) + 86400, 
-    sub: 'mailto:test@example.com' 
+  const header = b64.fromBuf(encoder.encode(JSON.stringify({alg:"ES256"})));
+  const body = b64.fromBuf(encoder.encode(JSON.stringify({
+    aud: origin,
+    exp: Math.floor(Date.now() / 1000) + 43200,
+    sub: "mailto:test@example.com"
   })));
   const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' } as any, signingKey, encoder.encode(`${header}.${body}`) as any);
-  const token = `${header}.${body}.${cryptoUtils.fromBuf(new Uint8Array(sig))}`;
+  const token = `${header}.${body}.${b64.fromBuf(new Uint8Array(sig))}`;
 
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'Authorization': `vapid t=${token}, k=${pub.replace(/=/g, '')}`,
+      'Authorization': `VAPID t=${token}, k=${pub.replace(/=/g, '')}`,
       'TTL': '86400',
       'Content-Type': 'application/octet-stream',
       'Content-Encoding': 'aes128gcm'
@@ -263,7 +261,6 @@ export async function addReport(profileId: number | null, type: string, content:
       const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription');
       if (subs && subs.length > 0) {
         const payload = JSON.stringify({ title: type === 'bug' ? '🐞 버그 제보' : '💡 기능 제안', body: content.substring(0, 50), url: '/' });
-        console.log(`🚀 Sending to ${subs.length} devices...`);
         const results = await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payload, pub, priv)));
         results.forEach((res, i) => {
           if (res.status === 'fulfilled') console.log(`✅ [${i}] Status: ${res.value}`);

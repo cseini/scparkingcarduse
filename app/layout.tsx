@@ -39,10 +39,8 @@ export default async function RootLayout({
           __html: `
             (function() {
               try {
-                var theme = localStorage.getItem('theme');
-                var systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-                var initialTheme = theme || systemTheme;
-                document.documentElement.setAttribute('data-theme', initialTheme);
+                var theme = localStorage.getItem('theme') || 'auto';
+                document.documentElement.setAttribute('data-theme', theme);
               } catch (e) {}
             })();
           `,

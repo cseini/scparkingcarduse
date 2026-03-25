@@ -1,8 +1,22 @@
 'use client'
 
-import { useState } from 'react'
-import { addProfile, updateProfile, deleteProfile } from './actions'
+import { useState, useEffect } from 'react'
+import { addProfile, updateProfile, deleteProfile, saveSubscription } from './actions'
 import { useToast } from './Toast'
+
+// VAPID 키를 Uint8Array로 변환하는 유틸리티 함수
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+const VAPID_PUBLIC_KEY = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
 
 interface Profile {
   id: number
@@ -11,10 +25,11 @@ interface Profile {
 
 interface ProfileManagerModalProps {
   profiles: Profile[]
+  activeProfileId?: number
   onClose: () => void
 }
 
-export default function ProfileManagerModal({ profiles, onClose }: ProfileManagerModalProps) {
+export default function ProfileManagerModal({ profiles, activeProfileId, onClose }: ProfileManagerModalProps) {
   const { showToast } = useToast()
   const [newName, setNewName] = useState('')
   const [newPin, setNewPin] = useState('')
@@ -22,6 +37,68 @@ export default function ProfileManagerModal({ profiles, onClose }: ProfileManage
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
   const [editPin, setEditPin] = useState('')
+  const [isSubscribed, setIsSubscribed] = useState(false)
+  const [pushLoading, setPushLoading] = useState(false)
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(registration => {
+        registration.pushManager.getSubscription().then(sub => {
+          if (sub) setIsSubscribed(true)
+        })
+      })
+    }
+  }, [])
+
+  const handleSubscribe = async () => {
+    if (!('serviceWorker' in navigator)) return alert('이 브라우저는 알림을 지원하지 않습니다.')
+
+    // @ts-ignore
+    const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+    if (!isStandalone && /iPhone|iPad|iPod/.test(navigator.userAgent)) {
+      return alert('아이폰은 "하단 공유 버튼 > 홈 화면에 추가"를 한 뒤 실행해야 알림을 받을 수 있습니다.')
+    }
+
+    setPushLoading(true)
+    try {
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') {
+        showToast('알림 권한이 거부되었습니다.', 'error')
+        return
+      }
+
+      let registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) {
+        registration = await navigator.serviceWorker.register('/sw.js');
+      }
+
+      await navigator.serviceWorker.ready;
+
+      const existingSub = await registration.pushManager.getSubscription();
+      if (existingSub) {
+        await existingSub.unsubscribe();
+      }
+
+      const sub = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      })
+
+      // [핵심] 현재 선택된 프로필 ID(activeProfileId)를 함께 저장
+      const result = await saveSubscription(activeProfileId || null, sub)
+      if (result.success) {
+        setIsSubscribed(true)
+        showToast('실시간 알림이 활성화되었습니다! 🔔', 'success')
+      } else {
+        throw new Error(result.error || '구독 정보 저장 실패');
+      }
+    } catch (err: any) {
+      console.error(err)
+      showToast(`알림 설정 오류: ${err.message}`, 'error')
+    } finally {
+      setPushLoading(false)
+    }
+  }
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -89,6 +166,46 @@ export default function ProfileManagerModal({ profiles, onClose }: ProfileManage
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <h2 style={{ fontSize: '1.25rem', margin: 0 }}>프로필 관리</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
+        </div>
+
+        {/* 알림 설정 영역 추가 */}
+        <div style={{ 
+          marginBottom: '1.5rem', 
+          padding: '1rem', 
+          background: isSubscribed ? '#f0fdf4' : '#f8fafc', 
+          borderRadius: '0.75rem', 
+          border: '1px dashed',
+          borderColor: isSubscribed ? '#bcf0da' : '#cbd5e1'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h4 style={{ fontSize: '0.9rem', margin: 0, color: '#334155' }}>
+                실시간 알림 {isSubscribed ? '수신 중 🔔' : '🔔'}
+              </h4>
+              <p style={{ fontSize: '0.7rem', color: '#64748b', margin: '0.25rem 0 0 0' }}>
+                {isSubscribed ? '리포트 알림을 받고 있습니다.' : '리포트 알림을 받으시겠습니까?'}
+              </p>
+            </div>
+            {!isSubscribed && (
+              <button 
+                onClick={handleSubscribe}
+                disabled={pushLoading}
+                style={{
+                  padding: '0.5rem 1rem',
+                  fontSize: '0.75rem',
+                  background: '#2563eb',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  opacity: pushLoading ? 0.7 : 1
+                }}
+              >
+                {pushLoading ? '설정 중...' : '알림 켜기'}
+              </button>
+            )}
+          </div>
         </div>
 
         <form onSubmit={handleAdd} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '0.75rem' }}>

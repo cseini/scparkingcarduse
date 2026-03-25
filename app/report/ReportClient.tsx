@@ -129,37 +129,6 @@ export default function ReportClient({ activeProfileId, activeProfileName }: Rep
 
   return (
     <div className="manage-section">
-      {/* 관리자('세인')에게만 알림 설정 UI 노출 */}
-      {activeProfileName === '세인' && (
-        <div style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px dashed #cbd5e1' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h4 style={{ fontSize: '0.9rem', margin: 0, color: '#334155' }}>실시간 알림 설정 🔔</h4>
-              <p style={{ fontSize: '0.7rem', color: '#64748b', margin: '0.25rem 0 0 0' }}>
-                {isSubscribed ? '알림 수신 중입니다.' : '리포트 알림을 받으시겠습니까?'}
-              </p>
-            </div>
-            {!isSubscribed && (
-              <button 
-                onClick={handleSubscribe}
-                style={{
-                  padding: '0.4rem 0.8rem',
-                  fontSize: '0.75rem',
-                  background: '#2563eb',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '0.4rem',
-                  fontWeight: 700,
-                  cursor: 'pointer'
-                }}
-              >
-                알림 켜기
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <label style={{ fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>작성자</label>

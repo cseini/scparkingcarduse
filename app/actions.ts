@@ -171,6 +171,8 @@ export async function deleteReport(id: number) {
 // 웹푸시 최종 정석 로직 (iOS/Edge 완벽 대응)
 // ---------------------------------------------------------
 
+const VAPID_PUBLIC_KEY = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
+
 const utils = {
   toBuf: (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
   fromBuf: (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -255,28 +257,44 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
   return response.status;
 }
 
+/**
+ * '세인' 프로필로 등록된 구독자에게만 푸시 알림을 발송합니다.
+ */
+async function sendPushToSein(payload: { title: string; body: string; url: string }) {
+  try {
+    const priv = process.env.VAPID_PRIVATE_KEY;
+    if (VAPID_PUBLIC_KEY && priv) {
+      // profiles 테이블에서 name이 '세인'인 프로필의 ID를 연계하여 구독 정보를 가져옵니다.
+      const { data: subs } = await supabase
+        .from('parking_push_subscriptions')
+        .select('subscription, profiles!inner(name)')
+        .eq('profiles.name', '세인');
+
+      if (subs && subs.length > 0) {
+        const payloadStr = JSON.stringify(payload);
+        // 모든 발송이 완료될 때까지 대기
+        await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payloadStr, VAPID_PUBLIC_KEY, priv)));
+      }
+    }
+  } catch (e: any) {
+    console.error('🔥 푸시 발송 오류:', e.message);
+  }
+}
+
 export async function addReport(profileId: number | null, type: string, content: string) {
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출 실패' }
   
-  try {
-    const pub = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
-    const priv = process.env.VAPID_PRIVATE_KEY;
-    if (pub && priv) {
-      const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription');
-      if (subs && subs.length > 0) {
-        const payload = JSON.stringify({ 
-          title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
-          body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
-          url: '/' 
-        });
-        // 모든 발송이 완료될 때까지 확실히 기다림 (Edge 핵심)
-        await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payload, pub, priv)));
-      }
-    }
-  } catch (e: any) { console.error('🔥 푸시 엔진 치명적 오류:', e.message); }
+  // 리포트 제출 시 '세인'님에게만 알림 발송
+  await sendPushToSein({ 
+    title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
+    body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
+    url: '/admin/reports' 
+  });
+  
   return { success: true };
 }
+
 
 export async function saveSubscription(profileId: number | null, subscription: any) {
   const { error } = await supabase.from('parking_push_subscriptions').insert({ profile_id: profileId, subscription })

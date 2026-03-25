@@ -262,9 +262,10 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
       {isManageModalOpen && (
         <ProfileManagerModal 
           profiles={profiles} 
+          activeProfileId={selectedProfileId ? parseInt(selectedProfileId, 10) : undefined}
           onClose={() => setIsManageModalOpen(false)} 
         />
       )}
-    </>
-  )
-}
+      </>
+      )
+      }

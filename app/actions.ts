@@ -168,138 +168,106 @@ export async function deleteReport(id: number) {
 }
 
 // ---------------------------------------------------------
-// 웹푸시 암호화 및 전송 로직 (BENCHMARKED: Absolute Edge Final)
+// 웹푸시 마스터피스 로직 (iOS/Edge 완벽 대응)
 // ---------------------------------------------------------
 
-const b64u = {
-  encode: (buf: Uint8Array) => btoa(String.fromCharCode(...buf)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
-  decode: (str: string) => Uint8Array.from(atob(str.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))
+const b64 = {
+  toBuf: (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
+  fromBuf: (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 };
 
-async function encryptPayload(subscription: any, payload: string) {
+async function encryptPayload(sub: any, payload: string) {
   const encoder = new TextEncoder();
-  const p256dh = b64u.decode(subscription.keys.p256dh);
-  const auth = b64u.decode(subscription.keys.auth);
+  const serverKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const serverPub = new Uint8Array(await crypto.subtle.exportKey('raw', serverKeys.publicKey));
+  const clientPub = b64.toBuf(sub.keys.p256dh);
+  const clientAuth = b64.toBuf(sub.keys.auth);
 
-  // 1. ECDH Shared Secret
-  const localKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
-  const localPublicKey = new Uint8Array(await crypto.subtle.exportKey('raw', localKeys.publicKey));
-  const remoteKey = await crypto.subtle.importKey('raw', p256dh as any, { name: 'ECDH', namedCurve: 'P-256' } as any, false, []);
-  const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: remoteKey } as any, localKeys.privateKey, 256));
+  const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({
+    name: 'ECDH', public: await crypto.subtle.importKey('raw', clientPub as any, { name: 'ECDH', namedCurve: 'P-256' } as any, false, [])
+  } as any, serverKeys.privateKey, 256));
 
-  // 2. HKDF-Extract & Expand (Manual logic for max precision)
-  const derive = async (ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, len: number) => {
+  const hkdf = async (ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, bits: number) => {
     const key = await crypto.subtle.importKey('raw', ikm as any, 'HKDF', false, ['deriveBits']);
-    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt as any, info: info as any } as any, key, len));
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt as any, info: info as any } as any, key, bits));
   };
 
-  // IKM 유도: RFC 8291
-  const ikm = await derive(sharedSecret, auth, new Uint8Array([...encoder.encode('Content-Encoding: auth'), 0]), 256);
-
-  // Salt & CEK, IV 유도
+  const ikm = await hkdf(sharedSecret, clientAuth, new Uint8Array([...encoder.encode('Content-Encoding: auth'), 0]), 256);
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const cek = await derive(ikm, salt, new Uint8Array([...encoder.encode('Content-Encoding: aes128gcm'), 0]), 128);
-  const iv = await derive(ikm, salt, new Uint8Array([...encoder.encode('Content-Encoding: nonce'), 0]), 96);
+  const cek = await hkdf(ikm, salt, new Uint8Array([...encoder.encode('Content-Encoding: aes128gcm'), 0]), 128);
+  const iv = await hkdf(ikm, salt, new Uint8Array([...encoder.encode('Content-Encoding: nonce'), 0]), 96);
 
-  // 3. AES-128-GCM Encryption
-  const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
   const plainText = encoder.encode(payload);
-  const record = new Uint8Array(plainText.length + 1);
-  record.set(plainText, 0);
-  record.set([0x02], plainText.length); // Final record delimiter
+  const data = new Uint8Array(plainText.length + 1);
+  data.set(plainText, 0);
+  data.set([2], plainText.length);
 
-  const encrypted = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any, tagLength: 128 } as any, aesKey, record as any));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any, tagLength: 128 } as any, 
+    await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']), data as any);
 
-  // 4. Binary Header (RFC 8188)
-  const result = new Uint8Array(21 + localPublicKey.length + encrypted.length);
+  const result = new Uint8Array(21 + 65 + encrypted.byteLength);
   result.set(salt, 0);
-  result.set([0, 0, 16, 0], 16); // RS=4096 (Big Endian)
-  result.set([localPublicKey.length], 20);
-  result.set(localPublicKey, 21);
-  result.set(encrypted, 21 + localPublicKey.length);
-
+  result.set([0, 0, 16, 0], 16);
+  result.set([65], 20);
+  result.set(serverPub, 21);
+  result.set(new Uint8Array(encrypted), 86);
   return result;
 }
 
-async function sendEdgePush(subscription: any, payload: string, publicKey: string, privateKey: string) {
-  const url = new URL(subscription.endpoint);
+async function sendPush(sub: any, payload: string, pub: string, priv: string) {
+  const endpoint = sub.endpoint;
+  const origin = new URL(endpoint).origin;
   
-  // VAPID JWT
-  const rawPublic = b64u.decode(publicKey);
-  const rawPrivate = b64u.decode(privateKey);
-  const jwk = {
-    kty: 'EC', crv: 'P-256',
-    x: b64u.encode(rawPublic.slice(1, 33)),
-    y: b64u.encode(rawPublic.slice(33, 65)),
-    d: b64u.encode(rawPrivate),
-    ext: true
-  };
-  const signingKey = await crypto.subtle.importKey('jwk', jwk as any, { name: 'ECDSA', namedCurve: 'P-256' } as any, false, ['sign']);
-  const encoder = new TextEncoder();
-  const header = b64u.encode(encoder.encode(JSON.stringify({ alg: 'ES256', typ: 'JWT' })));
-  const body = b64u.encode(encoder.encode(JSON.stringify({ 
-    aud: url.origin, 
-    exp: Math.floor(Date.now() / 1000) + 43200, 
-    sub: 'mailto:test@example.com' 
-  })));
-  const unsignedToken = `${header}.${body}`;
-  const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' } as any, signingKey, encoder.encode(unsignedToken) as any);
-  const signedToken = `${unsignedToken}.${b64u.encode(new Uint8Array(signature))}`;
+  const signingKey = await crypto.subtle.importKey('jwk', {
+    kty: 'EC', crv: 'P-256', ext: true,
+    x: b64.fromBuf(b64.toBuf(pub).slice(1, 33)),
+    y: b64.fromBuf(b64.toBuf(pub).slice(33, 65)),
+    d: b64.fromBuf(b64.toBuf(priv))
+  } as any, { name: 'ECDSA', namedCurve: 'P-256' } as any, false, ['sign']);
 
-  const encryptedPayload = await encryptPayload(subscription, payload);
-  
-  const response = await fetch(subscription.endpoint, {
+  const encoder = new TextEncoder();
+  const header = b64.fromBuf(encoder.encode(JSON.stringify({ alg: 'ES256', typ: 'JWT' })));
+  const body = b64.fromBuf(encoder.encode(JSON.stringify({ aud: origin, exp: Math.floor(Date.now()/1000)+43200, sub: 'mailto:admin@scparking.pages.dev' })));
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' } as any, signingKey, encoder.encode(`${header}.${body}`) as any);
+  const token = `${header}.${body}.${b64.fromBuf(new Uint8Array(sig))}`;
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'Authorization': `vapid t=${signedToken}, k=${publicKey.replace(/=/g, '')}`,
+      'Authorization': `vapid t=${token}, k=${pub}`,
       'TTL': '86400',
+      'Urgency': 'high',
+      'apns-push-type': 'alert',
+      'apns-priority': '10',
       'Content-Type': 'application/octet-stream',
       'Content-Encoding': 'aes128gcm'
     },
-    body: encryptedPayload
+    body: await encryptPayload(sub, payload)
   });
-  
-  if (!response.ok) throw new Error(`Apple API Error ${response.status}: ${await response.text()}`);
+
+  if (!response.ok) throw new Error(`Apple Error ${response.status}: ${await response.text()}`);
   return response.status;
 }
 
 export async function addReport(profileId: number | null, type: string, content: string) {
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
-  if (error) return { success: false, error: '제출에 실패했습니다.' }
+  if (error) return { success: false, error: '제출 실패' }
   
   try {
-    const publicKey = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
-    const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
-    
-    if (publicKey && privateKey) {
+    const pub = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
+    const priv = process.env.VAPID_PRIVATE_KEY;
+    if (pub && priv) {
       const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription');
-      if (subs && subs.length > 0) {
-        const payload = JSON.stringify({
-          title: type === 'bug' ? '🐞 버그 제보' : '💡 기능 제안',
-          body: content.length > 50 ? content.substring(0, 50) + '...' : content,
-          url: '/'
-        });
-
-        console.log(`🚀 Sending to ${subs.length} devices...`);
-        const results = await Promise.allSettled(subs.map((s: any) => sendEdgePush(s.subscription, payload, publicKey, privateKey)));
-        
-        results.forEach((res, i) => {
-          if (res.status === 'fulfilled') console.log(`✅ [${i}] Status: ${res.value}`);
-          else console.error(`❌ [${i}] Failed:`, res.reason);
-        });
-      }
+      const payload = JSON.stringify({ title: type === 'bug' ? '🐞 버그 제보' : '💡 기능 제안', body: content.substring(0, 50), url: '/' });
+      await Promise.allSettled(subs!.map((s: any) => sendPush(s.subscription, payload, pub, priv)));
     }
-  } catch (e: any) {
-    console.error('🔥 Fatal Push Error:', e.message);
-  }
-  
+  } catch (e: any) { console.error('Push Error:', e.message); }
   return { success: true };
 }
 
 export async function saveSubscription(profileId: number | null, subscription: any) {
   const { error } = await supabase.from('parking_push_subscriptions').insert({ profile_id: profileId, subscription })
-  if (error) return { success: false, error: '알림 설정 저장 실패' }
-  return { success: true }
+  return { success: !error };
 }
 
 export async function checkAutoReset(profileId: number) { return; }

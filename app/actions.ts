@@ -251,24 +251,57 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
 }
 
 export async function addReport(profileId: number | null, type: string, content: string) {
+  console.log('📝 리포트 제출 시작:', { profileId, type });
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
-  if (error) return { success: false, error: '제출 실패' }
+  if (error) {
+    console.error('❌ 리포트 DB 저장 실패:', error.message);
+    return { success: false, error: '제출 실패' };
+  }
   
   try {
     const pub = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
     const priv = process.env.VAPID_PRIVATE_KEY;
+    
+    console.log('🔑 VAPID 키 체크:', { hasPub: !!pub, hasPriv: !!priv });
+
     if (pub && priv) {
-      const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription');
-      if (subs && subs.length > 0) {
-        const payload = JSON.stringify({ title: type === 'bug' ? '🐞 버그 제보' : '💡 기능 제안', body: content.substring(0, 50), url: '/' });
-        const results = await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payload, pub, priv)));
-        results.forEach((res, i) => {
-          if (res.status === 'fulfilled') console.log(`✅ [${i}] Status: ${res.value}`);
-          else console.error(`❌ [${i}] Error:`, res.reason);
-        });
+      const { data: subs, error: subError } = await supabase.from('parking_push_subscriptions').select('subscription');
+      
+      if (subError) {
+        console.error('❌ 구독 정보 조회 실패:', subError.message);
+      } else {
+        console.log(`🔍 조회된 구독 수: ${subs?.length || 0}개`);
+        
+        if (subs && subs.length > 0) {
+          const payload = JSON.stringify({ 
+            title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
+            body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
+            url: '/' 
+          });
+
+          console.log('🚀 모든 기기로 푸시 발송 시작...');
+          // Edge 환경에서는 Promise가 완료될 때까지 확실히 기다려야 함
+          const results = await Promise.allSettled(subs.map((s: any) => sendPush(s.subscription, payload, pub, priv)));
+          
+          results.forEach((res, i) => {
+            if (res.status === 'fulfilled') {
+              console.log(`✅ [${i}] 발송 성공 (Status: ${res.value})`);
+            } else {
+              console.error(`❌ [${i}] 발송 실패:`, res.reason);
+            }
+          });
+          console.log('🏁 모든 푸시 발송 프로세스 종료');
+        } else {
+          console.log('⚠️ 알림을 보낼 구독 정보가 없습니다.');
+        }
       }
+    } else {
+      console.warn('⚠️ VAPID 키가 누락되어 푸시를 보내지 못했습니다.');
     }
-  } catch (e: any) { console.error('🔥 Fatal Push Error:', e.message); }
+  } catch (e: any) { 
+    console.error('🔥 푸시 엔진 치명적 오류:', e.message); 
+  }
+  
   return { success: true };
 }
 

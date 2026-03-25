@@ -6,7 +6,6 @@ export default function ThemeToggle() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
 
   useEffect(() => {
-    // 초기 테마 설정 확인
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null
     const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
     const initialTheme = savedTheme || systemTheme
@@ -34,8 +33,8 @@ export default function ThemeToggle() {
         width: '32px',
         height: '32px',
         display: 'flex',
-        align-items: center,
-        justify-content: center,
+        alignItems: 'center',
+        justifyContent: 'center',
         cursor: 'pointer',
         color: 'var(--foreground)',
         transition: 'all 0.3s ease',

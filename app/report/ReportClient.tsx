@@ -129,6 +129,87 @@ export default function ReportClient({ activeProfileId, activeProfileName }: Rep
 
   return (
     <div className="manage-section">
+      {/* 알림 설정 섹션 (세인 프로필일 때만 표시) */}
+      {activeProfileName === '세인' && (
+        <div style={{ 
+          marginBottom: '2rem',
+          padding: '1.25rem', 
+          background: isSubscribed ? '#f0fdf4' : '#f8fafc', 
+          borderRadius: '1rem',
+          border: '1px solid',
+          borderColor: isSubscribed ? '#bbf7d0' : '#e2e8f0',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                <span style={{ fontSize: '1.2rem' }}>{isSubscribed ? '🔔' : '🔕'}</span>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>
+                  {isSubscribed ? '실시간 알림 수신 중' : '리포트 실시간 알림 받기'}
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.85rem', color: '#64748b', lineHeight: 1.5 }}>
+                {isSubscribed 
+                  ? '새로운 버그 제보나 기능 제안이 올라오면 즉시 푸시 알림을 보내드립니다.' 
+                  : '세인님! 다른 분들이 남긴 소중한 리포트를 실시간으로 확인하려면 알림 설정을 켜주세요.'}
+              </p>
+            </div>
+            {!isSubscribed && (
+              <button
+                type="button"
+                onClick={handleSubscribe}
+                style={{
+                  padding: '0.6rem 1.2rem',
+                  background: '#1e293b',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.6rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                  flexShrink: 0
+                }}
+              >
+                알림 켜기
+              </button>
+            )}
+          </div>
+          {isSubscribed && (
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.5rem',
+              padding: '0.5rem 0.75rem',
+              background: '#dcfce7',
+              borderRadius: '0.5rem',
+              width: 'fit-content'
+            }}>
+              <span style={{ color: '#16a34a', fontSize: '0.8rem', fontWeight: 700 }}>✓ 현재 기기에서 활성화됨</span>
+              <button 
+                type="button"
+                onClick={handleSubscribe}
+                style={{
+                  fontSize: '0.75rem',
+                  color: '#166534',
+                  textDecoration: 'underline',
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
+                  marginLeft: '0.5rem'
+                }}
+              >
+                갱신하기
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <label style={{ fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>작성자</label>

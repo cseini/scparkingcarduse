@@ -303,7 +303,10 @@ export async function addReport(profileId: number | null, type: string, content:
 
 export async function saveSubscription(profileId: number | null, subscription: any) {
   const { error } = await supabase.from('parking_push_subscriptions').insert({ profile_id: profileId, subscription })
-  if (error) return { success: false, error: '알림 설정 저장 실패' }
+  if (error) {
+    console.error('Subscription save error:', error)
+    return { success: false, error: `알림 설정 저장 실패: ${error.message} (코드: ${error.code})` }
+  }
   return { success: true }
 }
 

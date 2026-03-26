@@ -1,22 +1,23 @@
-
-// @ts-nocheck
 import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
-// .env.local 로드
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
-const VAPID_PUBLIC_KEY = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY!;
 
 const utils = {
   toBuf: (s: string) => {
     const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
     const pad = b64.length % 4;
     const padded = pad ? b64 + '='.repeat(4 - pad) : b64;
-    return Uint8Array.from(atob(padded), c => c.charCodeAt(0));
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
   },
   fromBuf: (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 };
@@ -28,26 +29,28 @@ async function encryptPayload(sub: any, payload: string) {
 
   const localKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   const localPub = new Uint8Array(await crypto.subtle.exportKey('raw', localKeys.publicKey));
-  const remotePub = await crypto.subtle.importKey('raw', p256dh as any, { name: 'ECDH', namedCurve: 'P-256' } as any, false, []);
-  const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: remotePub } as any, localKeys.privateKey, 256));
+  const remotePub = await crypto.subtle.importKey('raw', p256dh, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  
+  const sharedSecret = await crypto.subtle.deriveBits({ name: 'ECDH', public: remotePub }, localKeys.privateKey, 256);
 
-  const hkdf = async (ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, bits: number) => {
-    const key = await crypto.subtle.importKey('raw', ikm as any, 'HKDF', false, ['deriveBits']);
-    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt as any, info: info as any } as any, key, bits));
-  };
+  const authInfo = new Uint8Array([...encoder.encode('WebPush: info'), 0, ...p256dh, ...localPub]);
+  
+  const hkdfKey1 = await crypto.subtle.importKey('raw', sharedSecret, 'HKDF', false, ['deriveBits']);
+  const ikm = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: auth, info: authInfo }, hkdfKey1, 256);
 
-  const ikm = await hkdf(sharedSecret, auth, new Uint8Array([...encoder.encode('Content-Encoding: auth'), 0]), 256);
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const cek = await hkdf(ikm, salt, new Uint8Array([...encoder.encode('Content-Encoding: aes128gcm'), 0]), 128);
-  const iv = await hkdf(ikm, salt, new Uint8Array([...encoder.encode('Content-Encoding: nonce'), 0]), 96);
+  const hkdfKey2 = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+  
+  const cek = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt, info: new Uint8Array([...encoder.encode('Content-Encoding: aes128gcm'), 0]) }, hkdfKey2, 128);
+  const iv = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt, info: new Uint8Array([...encoder.encode('Content-Encoding: nonce'), 0]) }, hkdfKey2, 96);
 
-  const aesKey = await crypto.subtle.importKey('raw', cek as any, 'AES-GCM', false, ['encrypt']);
+  const aesKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
   const plainText = encoder.encode(payload);
   const record = new Uint8Array(plainText.length + 1);
   record.set(plainText, 0);
   record.set([2], plainText.length);
 
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any, tagLength: 128 } as any, aesKey, record as any);
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv, tagLength: 128 }, aesKey, record);
 
   const result = new Uint8Array(21 + 65 + ciphertext.byteLength);
   result.set(salt, 0);
@@ -79,7 +82,8 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
   const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' } as any, signingKey, encoder.encode(`${header}.${body}`) as any);
   const token = `${header}.${body}.${utils.fromBuf(new Uint8Array(sig))}`;
 
-  console.log("📤 전송 중... Endpoint:", sub.endpoint);
+  console.log(`[PUSH] Sending to: ${sub.endpoint.substring(0, 40)}...`);
+
   const response = await fetch(sub.endpoint, {
     method: 'POST',
     headers: {
@@ -94,39 +98,12 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
   return response.status;
 }
 
-async function testSeinPush() {
-  const priv = process.env.VAPID_PRIVATE_KEY;
-  if (!priv) {
-    console.error("❌ VAPID_PRIVATE_KEY 없음");
-    return;
-  }
-
-  const { data: subs } = await supabase
-    .from('parking_push_subscriptions')
-    .select('subscription, profiles!inner(name)')
-    .eq('profiles.name', '세인');
-
-  if (!subs || subs.length === 0) {
-    console.error("❌ '세인' 구독 정보 찾을 수 없음");
-    return;
-  }
-
-  console.log(`🔍 '세인'님 기기 ${subs.length}대 발견. 테스트 발송 시작...`);
-  
-  const payload = JSON.stringify({
-    title: '🔔 엣지 로직 테스트',
-    body: '이것이 오면 로직은 정상, 환경 문제입니다.',
-    url: '/'
-  });
-
-  for (const s of subs) {
-    try {
-      const status = await sendPush(s.subscription, payload, VAPID_PUBLIC_KEY, priv);
-      console.log(`✅ 발송 결과: ${status}`);
-    } catch (e) {
-      console.error(`❌ 발송 오류:`, e);
-    }
+async function run() {
+  const { data: subs } = await supabase.from('parking_push_subscriptions').select('subscription').order('created_at', { ascending: false }).limit(1);
+  if (subs && subs.length > 0) {
+    console.log("발송 시작!");
+    const status = await sendPush(subs[0].subscription, JSON.stringify({ title: '정확한 로직 테스트', body: '이게 오면 암호화가 100% 맞는 겁니다!' }), VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    console.log("결과 코드:", status);
   }
 }
-
-testSeinPush();
+run();

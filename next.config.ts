@@ -3,8 +3,8 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV !== 'production';
 
 const nextConfig: NextConfig = {
-  /* config options here */
   reactStrictMode: true,
+  transpilePackages: ['date-fns', 'date-fns-tz'],
   ...(isDev && {
     experimental: {
       // @ts-ignore: allowedDevOrigins is an undocumented/experimental feature in Turbopack

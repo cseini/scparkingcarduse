@@ -1,12 +1,20 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getReports, deleteReport } from '../../actions'
+import { getReports, deleteReport, addComment, deleteComment } from '../../actions'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale/ko'
 import { useToast } from '../../Toast'
-import Cookies from 'js-cookie'
 import { useRouter } from 'next/navigation'
+
+interface Comment {
+  id: number
+  author_name: string
+  content: string
+  is_admin: boolean
+  created_at: string
+  profile_id: number | null
+}
 
 interface Report {
   id: number
@@ -15,112 +23,308 @@ interface Report {
   content: string
   created_at: string
   profiles?: { name: string }
+  parking_report_comments?: Comment[]
 }
 
-export default function ReportsClient({ initialReports }: { initialReports: any[] }) {
+interface ReportsClientProps {
+  initialReports: Report[]
+  adminProfileId: number
+  adminProfileName: string
+}
+
+export default function ReportsClient({ initialReports, adminProfileId, adminProfileName }: ReportsClientProps) {
   const [reports, setReports] = useState<Report[]>(initialReports)
   const [loading, setLoading] = useState(false)
+  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [commentInputs, setCommentInputs] = useState<Record<number, string>>({})
+  const [commentLoading, setCommentLoading] = useState<number | null>(null)
   const { showToast } = useToast()
   const router = useRouter()
 
-  // 서버에서 props가 변경될 때마다(예: router.refresh() 호출 시) 로컬 상태 동기화
   useEffect(() => {
     setReports(initialReports)
   }, [initialReports])
-
-  // 어드민 체크 (간이 보안: 쿠키에 저장된 프로필 ID의 이름을 Navigation에서 이미 검증하지만 여기서도 확인 가능하면 좋습니다.)
-  // 하지만 여기서는 리스트 렌더링에 집중하겠습니다.
 
   const handleDelete = async (id: number) => {
     if (!confirm('이 리포트를 삭제하시겠습니까?')) return
     setLoading(true)
     try {
-      // 1. 낙관적 업데이트: UI에서 먼저 제거
       setReports(reports.filter(r => r.id !== id))
-      
-      // 2. 서버에 삭제 요청
       const result = await deleteReport(id)
       if (result.success) {
         showToast('리포트가 삭제되었습니다.', 'success')
-        // 3. Next.js 라우터 캐시 무효화 및 새로운 데이터 페칭 트리거
         router.refresh()
       } else {
-        // 롤백: 삭제 실패 시 원래 상태로 복구
         setReports(initialReports)
         showToast(result.error || '삭제 실패', 'error')
       }
-    } catch (err) {
-      setReports(initialReports) // 에러 시 롤백
+    } catch {
+      setReports(initialReports)
       showToast('오류가 발생했습니다.', 'error')
     } finally {
       setLoading(false)
     }
   }
 
+  const handleAddComment = async (reportId: number) => {
+    const content = commentInputs[reportId]?.trim()
+    if (!content) return
+    setCommentLoading(reportId)
+    try {
+      const result = await addComment(reportId, adminProfileId, adminProfileName, content, true)
+      if (result.success) {
+        setCommentInputs(prev => ({ ...prev, [reportId]: '' }))
+        showToast('답글을 전송했습니다.', 'success')
+        router.refresh()
+      } else {
+        showToast(result.error || '답글 저장 실패', 'error')
+      }
+    } catch {
+      showToast('오류가 발생했습니다.', 'error')
+    } finally {
+      setCommentLoading(null)
+    }
+  }
+
+  const handleDeleteComment = async (commentId: number) => {
+    if (!confirm('이 댓글을 삭제하시겠습니까?')) return
+    try {
+      const result = await deleteComment(commentId)
+      if (result.success) {
+        showToast('댓글이 삭제되었습니다.', 'success')
+        router.refresh()
+      } else {
+        showToast(result.error || '삭제 실패', 'error')
+      }
+    } catch {
+      showToast('오류가 발생했습니다.', 'error')
+    }
+  }
+
   return (
     <div className="container">
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1.5rem', color: '#1e293b' }}>🐞 제보 목록 (Admin)</h1>
-      
+      <h1 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1.5rem', color: 'var(--text-strong)' }}>
+        🐞 제보 목록 (Admin)
+      </h1>
+
       {reports.length === 0 ? (
         <div className="empty-msg">제보된 내용이 없습니다.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {reports.map((report) => (
-            <div key={report.id} style={{ 
-              background: 'white', 
-              padding: '1.25rem', 
-              borderRadius: '1rem', 
-              boxShadow: 'var(--shadow)',
-              border: '1px solid #e2e8f0',
-              position: 'relative'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <span style={{ 
-                    padding: '0.2rem 0.5rem', 
-                    borderRadius: '0.4rem', 
-                    fontSize: '0.7rem', 
-                    fontWeight: 700,
-                    background: report.type === 'bug' ? '#fee2e2' : '#dcfce7',
-                    color: report.type === 'bug' ? '#ef4444' : '#10b981'
-                  }}>
-                    {report.type === 'bug' ? '버그' : '제안'}
-                  </span>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>
-                    {report.profiles?.name || '익명'}
-                  </span>
-                </div>
-                <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
-                  {format(new Date(report.created_at), 'yyyy-MM-dd HH:mm', { locale: ko })}
-                </span>
-              </div>
-              <p style={{ 
-                fontSize: '0.95rem', 
-                color: '#334155', 
-                lineHeight: 1.5, 
-                whiteSpace: 'pre-wrap',
-                margin: '0 0 1rem 0'
+          {reports.map((report) => {
+            const comments = report.parking_report_comments || []
+            const isExpanded = expandedId === report.id
+            const commentCount = comments.length
+
+            return (
+              <div key={report.id} style={{
+                background: 'var(--card-bg)',
+                borderRadius: '1rem',
+                boxShadow: 'var(--shadow)',
+                border: '1px solid var(--border)',
+                overflow: 'hidden'
               }}>
-                {report.content}
-              </p>
-              <button 
-                onClick={() => handleDelete(report.id)}
-                disabled={loading}
-                style={{ 
-                  background: '#f1f5f9', 
-                  border: 'none', 
-                  color: '#ef4444', 
-                  fontSize: '0.75rem', 
-                  padding: '0.4rem 0.8rem', 
-                  borderRadius: '0.5rem',
-                  cursor: 'pointer',
-                  fontWeight: 600
-                }}
-              >
-                삭제
-              </button>
-            </div>
-          ))}
+                {/* 리포트 헤더 */}
+                <div style={{ padding: '1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <span style={{
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: '0.4rem',
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        background: report.type === 'bug' ? '#fee2e2' : '#dcfce7',
+                        color: report.type === 'bug' ? '#ef4444' : '#10b981'
+                      }}>
+                        {report.type === 'bug' ? '버그' : '제안'}
+                      </span>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                        {report.profiles?.name || '익명'}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                      {format(new Date(report.created_at), 'yyyy-MM-dd HH:mm', { locale: ko })}
+                    </span>
+                  </div>
+
+                  <p style={{
+                    fontSize: '0.95rem',
+                    color: 'var(--foreground)',
+                    lineHeight: 1.5,
+                    whiteSpace: 'pre-wrap',
+                    margin: '0 0 1rem 0'
+                  }}>
+                    {report.content}
+                  </p>
+
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <button
+                      onClick={() => setExpandedId(isExpanded ? null : report.id)}
+                      style={{
+                        background: isExpanded ? '#eff6ff' : 'var(--item-bg)',
+                        border: `1px solid ${isExpanded ? '#bfdbfe' : 'var(--border)'}`,
+                        color: isExpanded ? '#2563eb' : 'var(--text-muted)',
+                        fontSize: '0.78rem',
+                        padding: '0.35rem 0.75rem',
+                        borderRadius: '0.5rem',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.3rem'
+                      }}
+                    >
+                      💬 댓글 {commentCount > 0 ? `${commentCount}개` : '달기'}
+                      <span style={{ fontSize: '0.65rem' }}>{isExpanded ? '▲' : '▼'}</span>
+                    </button>
+                    <button
+                      onClick={() => handleDelete(report.id)}
+                      disabled={loading}
+                      style={{
+                        background: 'var(--item-bg)',
+                        border: '1px solid var(--border)',
+                        color: '#ef4444',
+                        fontSize: '0.75rem',
+                        padding: '0.35rem 0.75rem',
+                        borderRadius: '0.5rem',
+                        cursor: 'pointer',
+                        fontWeight: 600
+                      }}
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </div>
+
+                {/* 댓글 영역 */}
+                {isExpanded && (
+                  <div style={{
+                    borderTop: '1px solid var(--border)',
+                    background: 'var(--item-bg)',
+                    padding: '1rem 1.25rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.75rem'
+                  }}>
+                    {/* 기존 댓글 목록 */}
+                    {comments.length === 0 ? (
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.5rem 0' }}>
+                        아직 댓글이 없습니다.
+                      </p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {comments
+                          .slice()
+                          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                          .map((comment) => (
+                            <div key={comment.id} style={{
+                              display: 'flex',
+                              gap: '0.5rem',
+                              alignItems: 'flex-start',
+                              flexDirection: comment.is_admin ? 'row-reverse' : 'row'
+                            }}>
+                              <div style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '50%',
+                                background: comment.is_admin ? '#2563eb' : '#e2e8f0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.7rem',
+                                fontWeight: 800,
+                                color: comment.is_admin ? 'white' : '#64748b',
+                                flexShrink: 0
+                              }}>
+                                {comment.author_name[0]}
+                              </div>
+                              <div style={{
+                                maxWidth: '80%',
+                                background: comment.is_admin ? '#2563eb' : 'var(--card-bg)',
+                                color: comment.is_admin ? 'white' : 'var(--foreground)',
+                                padding: '0.5rem 0.75rem',
+                                borderRadius: comment.is_admin ? '1rem 0.25rem 1rem 1rem' : '0.25rem 1rem 1rem 1rem',
+                                fontSize: '0.85rem',
+                                lineHeight: 1.5,
+                                border: comment.is_admin ? 'none' : '1px solid var(--border)',
+                                position: 'relative'
+                              }}>
+                                <div style={{
+                                  fontSize: '0.65rem',
+                                  fontWeight: 700,
+                                  marginBottom: '0.2rem',
+                                  opacity: 0.75
+                                }}>
+                                  {comment.author_name} · {format(new Date(comment.created_at), 'MM/dd HH:mm')}
+                                </div>
+                                <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{comment.content}</p>
+                              </div>
+                              {/* 어드민은 모든 댓글 삭제 가능 */}
+                              <button
+                                onClick={() => handleDeleteComment(comment.id)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: 'var(--text-muted)',
+                                  cursor: 'pointer',
+                                  fontSize: '0.7rem',
+                                  padding: '0.2rem',
+                                  alignSelf: 'center',
+                                  flexShrink: 0
+                                }}
+                                title="댓글 삭제"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+
+                    {/* 댓글 입력 */}
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                      <input
+                        type="text"
+                        placeholder="답글을 입력하세요..."
+                        value={commentInputs[report.id] || ''}
+                        onChange={(e) => setCommentInputs(prev => ({ ...prev, [report.id]: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(report.id) } }}
+                        disabled={commentLoading === report.id}
+                        style={{
+                          flex: 1,
+                          padding: '0.6rem 0.75rem',
+                          borderRadius: '0.6rem',
+                          border: '1px solid var(--border)',
+                          fontSize: '0.85rem',
+                          background: 'var(--input-bg)',
+                          color: 'var(--foreground)',
+                          outline: 'none'
+                        }}
+                      />
+                      <button
+                        onClick={() => handleAddComment(report.id)}
+                        disabled={commentLoading === report.id || !commentInputs[report.id]?.trim()}
+                        style={{
+                          padding: '0.6rem 1rem',
+                          background: '#2563eb',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '0.6rem',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                          opacity: (!commentInputs[report.id]?.trim() || commentLoading === report.id) ? 0.5 : 1
+                        }}
+                      >
+                        {commentLoading === report.id ? '...' : '전송'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

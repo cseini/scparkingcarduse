@@ -156,7 +156,19 @@ export async function setProfileCookieAction(id: string) {
 }
 
 export async function getReports() {
-  const { data } = await supabase.from('parking_app_feedback').select('*, profiles(name)').order('created_at', { ascending: false })
+  const { data } = await supabase
+    .from('parking_app_feedback')
+    .select('*, profiles(name), parking_report_comments(id, author_name, content, is_admin, created_at, profile_id)')
+    .order('created_at', { ascending: false })
+  return data || []
+}
+
+export async function getMyReports(profileId: number) {
+  const { data } = await supabase
+    .from('parking_app_feedback')
+    .select('*, parking_report_comments(id, author_name, content, is_admin, created_at, profile_id)')
+    .eq('profile_id', profileId)
+    .order('created_at', { ascending: false })
   return data || []
 }
 
@@ -168,7 +180,53 @@ export async function deleteReport(id: number) {
 }
 
 // ---------------------------------------------------------
-// 웹푸시 최종 정석 로직 (RFC 8291 완벽 대응 및 터미널 성공 입증 완료)
+// 댓글 관련 액션
+// ---------------------------------------------------------
+
+export async function addComment(
+  reportId: number,
+  profileId: number | null,
+  authorName: string,
+  content: string,
+  isAdmin: boolean
+) {
+  const { error } = await supabase
+    .from('parking_report_comments')
+    .insert({ report_id: reportId, profile_id: profileId, author_name: authorName, content, is_admin: isAdmin })
+  if (error) return { success: false, error: '댓글 저장 실패' }
+
+  // 푸시 알림 발송
+  if (isAdmin) {
+    // 세인이 댓글 → 리포트 작성자에게 푸시
+    await sendPushToReportAuthor(reportId, {
+      title: '💬 세인님의 답글',
+      body: content.length > 60 ? content.substring(0, 60) + '...' : content,
+      url: '/report'
+    })
+  } else {
+    // 일반 사용자가 댓글 → 세인에게 푸시
+    await sendPushToSein({
+      title: `💬 ${authorName}님의 댓글`,
+      body: content.length > 60 ? content.substring(0, 60) + '...' : content,
+      url: '/admin/reports'
+    })
+  }
+
+  revalidatePath('/admin/reports')
+  revalidatePath('/report')
+  return { success: true }
+}
+
+export async function deleteComment(id: number) {
+  const { error } = await supabase.from('parking_report_comments').delete().eq('id', id)
+  if (error) return { success: false, error: '삭제 실패' }
+  revalidatePath('/admin/reports')
+  revalidatePath('/report')
+  return { success: true }
+}
+
+// ---------------------------------------------------------
+// 웹푸시 최종 정석 로직 (RFC 8291 완벽 대응)
 // ---------------------------------------------------------
 
 const VAPID_PUBLIC_KEY = "BNPVV7YciM1jX1zBRb20scPZX3OfrDOo-z92Yqoq67l5WDHEKhR8z1b-6J93_rLvs6YXabgB5CZAZ66auYMJpro";
@@ -194,17 +252,17 @@ async function encryptPayload(sub: any, payload: string) {
   const localKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   const localPub = new Uint8Array(await crypto.subtle.exportKey('raw', localKeys.publicKey));
   const remotePub = await crypto.subtle.importKey('raw', p256dh, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
-  
+
   const sharedSecret = await crypto.subtle.deriveBits({ name: 'ECDH', public: remotePub } as any, localKeys.privateKey, 256);
 
   const authInfo = new Uint8Array([...encoder.encode('WebPush: info'), 0, ...p256dh, ...localPub]);
-  
+
   const hkdfKey1 = await crypto.subtle.importKey('raw', sharedSecret, 'HKDF', false, ['deriveBits']);
   const ikm = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: auth, info: authInfo } as any, hkdfKey1, 256);
 
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const hkdfKey2 = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
-  
+
   const cek = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt, info: new Uint8Array([...encoder.encode('Content-Encoding: aes128gcm'), 0]) } as any, hkdfKey2, 128);
   const iv = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: salt, info: new Uint8Array([...encoder.encode('Content-Encoding: nonce'), 0]) } as any, hkdfKey2, 96);
 
@@ -228,7 +286,7 @@ async function encryptPayload(sub: any, payload: string) {
 
 async function sendPush(sub: any, payload: string, pub: string, priv: string) {
   const url = new URL(sub.endpoint);
-  
+
   const signingKey = await crypto.subtle.importKey('jwk', {
     kty: 'EC', crv: 'P-256', ext: true,
     x: utils.fromBuf(utils.toBuf(pub).slice(1, 33)),
@@ -238,10 +296,10 @@ async function sendPush(sub: any, payload: string, pub: string, priv: string) {
 
   const encoder = new TextEncoder();
   const header = utils.fromBuf(encoder.encode(JSON.stringify({ alg: 'ES256', typ: 'JWT' })));
-  const body = utils.fromBuf(encoder.encode(JSON.stringify({ 
-    aud: url.origin, 
-    exp: Math.floor(Date.now() / 1000) + 86400, 
-    sub: 'mailto:admin@scparking.pages.dev' 
+  const body = utils.fromBuf(encoder.encode(JSON.stringify({
+    aud: url.origin,
+    exp: Math.floor(Date.now() / 1000) + 86400,
+    sub: 'mailto:admin@scparking.pages.dev'
   })));
   const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' } as any, signingKey, encoder.encode(`${header}.${body}`) as any);
   const token = `${header}.${body}.${utils.fromBuf(new Uint8Array(sig))}`;
@@ -264,7 +322,7 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
   try {
     const priv = process.env.VAPID_PRIVATE_KEY;
     if (!priv) return { success: false, error: '비공개 키 없음' };
-    
+
     const { data: subs, error } = await supabase
       .from('parking_push_subscriptions')
       .select('subscription, profiles!inner(name)')
@@ -287,19 +345,45 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
   }
 }
 
+async function sendPushToReportAuthor(reportId: number, payload: { title: string; body: string; url: string }) {
+  try {
+    const priv = process.env.VAPID_PRIVATE_KEY;
+    if (!priv) return;
+
+    const { data: report } = await supabase
+      .from('parking_app_feedback')
+      .select('profile_id')
+      .eq('id', reportId)
+      .single();
+    if (!report?.profile_id) return;
+
+    const { data: subs } = await supabase
+      .from('parking_push_subscriptions')
+      .select('subscription')
+      .eq('profile_id', report.profile_id);
+    if (!subs || subs.length === 0) return;
+
+    const payloadStr = JSON.stringify(payload);
+    for (const s of subs) {
+      await sendPush(s.subscription, payloadStr, VAPID_PUBLIC_KEY, priv);
+    }
+  } catch {
+    // 푸시 실패는 조용히 처리
+  }
+}
+
 export async function addReport(profileId: number | null, type: string, content: string) {
   const { error = null } = await supabase.from('parking_app_feedback').insert({ profile_id: profileId, type, content })
   if (error) return { success: false, error: '제출 실패' }
-  
-  await sendPushToSein({ 
-    title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안', 
-    body: content.length > 50 ? content.substring(0, 50) + '...' : content, 
-    url: '/admin/reports' 
+
+  await sendPushToSein({
+    title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안',
+    body: content.length > 50 ? content.substring(0, 50) + '...' : content,
+    url: '/admin/reports'
   });
-  
+
   return { success: true };
 }
-
 
 export async function saveSubscription(profileId: number | null, subscription: any) {
   const { error } = await supabase.from('parking_push_subscriptions').insert({ profile_id: profileId, subscription })

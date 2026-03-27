@@ -314,10 +314,10 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
           return (
             <div
               key={card.id}
-              className="parking-card"
-              style={{ borderColor: color, backgroundColor: `${color}10` }}
+              className={`parking-card${hasPrevPerf ? '' : ' card-disabled'}`}
+              style={hasPrevPerf ? { borderColor: color, backgroundColor: `${color}10` } : undefined}
             >
-              <h3 className="user-name" style={{ color }}>{card.user_name}</h3>
+              <h3 className="user-name" style={hasPrevPerf ? { color } : undefined}>{card.user_name}</h3>
               <div className="card-middle">
                 {hasPrevPerf ? (
                   <>
@@ -336,7 +336,7 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
                   </>
                 ) : (
                   <>
-                    <div className="no-performance-label">실적미달성</div>
+                    <div className="no-performance-label">전월 실적 미달성</div>
                     <div className="remaining-label" style={{ visibility: 'hidden' }}>회 남음</div>
                   </>
                 )}

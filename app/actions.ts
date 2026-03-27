@@ -157,7 +157,7 @@ export async function setProfileCookieAction(id: string) {
 }
 
 export async function getReports() {
-  const { data } = await supabase
+  const { data } = await supabaseAdmin
     .from('parking_app_feedback')
     .select('*, profiles(name), parking_report_comments(id, author_name, content, is_admin, created_at, profile_id)')
     .order('created_at', { ascending: false })
@@ -165,7 +165,7 @@ export async function getReports() {
 }
 
 export async function getMyReports(profileId: number) {
-  const { data } = await supabase
+  const { data } = await supabaseAdmin
     .from('parking_app_feedback')
     .select('*, parking_report_comments(id, author_name, content, is_admin, created_at, profile_id)')
     .eq('profile_id', profileId)

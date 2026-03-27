@@ -312,23 +312,19 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
                 onClick={() => isCurrentMonth && handleDateClick(day)}
               >
                 <span className="day-number">{format(day, 'd')}</span>
-                {holidayName && isCurrentMonth && (
-                  <span className="holiday-name">{holidayName}</span>
-                )}
                 <div className="usage-center-container">
-                  {dayHistory.length > 0 && (
+                  {dayHistory.length > 0 ? (
                     <div
                       className="usage-tag-prominent"
-                      style={{
-                        backgroundColor: getCardColor(dayHistory[0].card_id),
-                        color: '#fff'
-                      }}
+                      style={{ backgroundColor: getCardColor(dayHistory[0].card_id), color: '#fff' }}
                       onClick={(e) => isCurrentMonth && handleHistoryClick(e, dayHistory[0])}
                       title="클릭하여 수정/삭제"
                     >
                       {dayHistory[0].user_name}
                     </div>
-                  )}
+                  ) : holidayName && isCurrentMonth ? (
+                    <span className="holiday-name">{holidayName}</span>
+                  ) : null}
                 </div>
               </div>
             )

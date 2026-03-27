@@ -265,7 +265,7 @@ body {
 .calendar-day.holiday .day-number { color: #ef4444; }
 .calendar-day.saturday .day-number { color: #3b82f6; }
 .day-number { font-size: 0.7rem; font-weight: 600; color: var(--foreground); }
-.holiday-name { font-size: 0.68rem; color: #ef4444; font-weight: 700; text-align: center; line-height: 1.2; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.1rem; }
+.holiday-name { font-size: 0.75rem; color: #ef4444; font-weight: 800; text-align: center; line-height: 1.3; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .usage-center-container { flex: 1; display: flex; align-items: center; justify-content: center; padding: 0.05rem; }
 .usage-tag-prominent {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   format,
   startOfMonth,
@@ -168,6 +168,19 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
   const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1))
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
 
+  const touchStartX = useRef<number | null>(null)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX
+  }
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return
+    const delta = e.changedTouches[0].clientX - touchStartX.current
+    if (Math.abs(delta) > 50) {
+      delta < 0 ? nextMonth() : prevMonth()
+    }
+    touchStartX.current = null
+  }
+
   const getCardColor = (cardId: number) => {
     const card = cards.find(c => c.id === cardId)
     return card?.color || '#cbd5e1'
@@ -257,7 +270,7 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
         })}
       </div>
 
-      <div className="calendar-container">
+      <div className="calendar-container" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         <div className="calendar-header">
           <button onClick={prevMonth} className="nav-btn">&lt;</button>
           <h2>{format(currentMonth, 'yyyy년 MM월', { locale: ko })}</h2>

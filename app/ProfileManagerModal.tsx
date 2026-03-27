@@ -276,7 +276,9 @@ export default function ProfileManagerModal({ profiles, activeProfileId, onClose
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontWeight: 600 }}>{p.name}</span>
                       <div className="card-actions">
-                        <button onClick={() => { setEditingId(p.id); setEditName(p.name); }} className="edit-button">수정</button>
+                        {(isAdmin || p.id === activeProfileId) && (
+                          <button onClick={() => { setEditingId(p.id); setEditName(p.name); }} className="edit-button">수정</button>
+                        )}
                         {(isAdmin || p.id === activeProfileId) && (
                           <button onClick={() => handleDelete(p.id, p.name)} className="delete-button">삭제</button>
                         )}

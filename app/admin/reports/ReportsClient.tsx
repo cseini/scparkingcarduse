@@ -35,15 +35,12 @@ interface ReportsClientProps {
 export default function ReportsClient({ initialReports, adminProfileId, adminProfileName }: ReportsClientProps) {
   const [reports, setReports] = useState<Report[]>(initialReports)
   const [loading, setLoading] = useState(false)
-  const [expandedId, setExpandedId] = useState<number | null>(null)
   const [commentInputs, setCommentInputs] = useState<Record<number, string>>({})
   const [commentLoading, setCommentLoading] = useState<number | null>(null)
   const { showToast } = useToast()
   const router = useRouter()
 
-  useEffect(() => {
-    setReports(initialReports)
-  }, [initialReports])
+  useEffect(() => { setReports(initialReports) }, [initialReports])
 
   const handleDelete = async (id: number) => {
     if (!confirm('이 리포트를 삭제하시겠습니까?')) return
@@ -113,8 +110,6 @@ export default function ReportsClient({ initialReports, adminProfileId, adminPro
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {reports.map((report) => {
             const comments = report.parking_report_comments || []
-            const isExpanded = expandedId === report.id
-            const commentCount = comments.length
 
             return (
               <div key={report.id} style={{
@@ -124,7 +119,6 @@ export default function ReportsClient({ initialReports, adminProfileId, adminPro
                 border: '1px solid var(--border)',
                 overflow: 'hidden'
               }}>
-                {/* 리포트 헤더 */}
                 <div style={{ padding: '1.25rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -159,25 +153,6 @@ export default function ReportsClient({ initialReports, adminProfileId, adminPro
 
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                     <button
-                      onClick={() => setExpandedId(isExpanded ? null : report.id)}
-                      style={{
-                        background: isExpanded ? '#eff6ff' : 'var(--item-bg)',
-                        border: `1px solid ${isExpanded ? '#bfdbfe' : 'var(--border)'}`,
-                        color: isExpanded ? '#2563eb' : 'var(--text-muted)',
-                        fontSize: '0.78rem',
-                        padding: '0.35rem 0.75rem',
-                        borderRadius: '0.5rem',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.3rem'
-                      }}
-                    >
-                      💬 댓글 {commentCount > 0 ? `${commentCount}개` : '달기'}
-                      <span style={{ fontSize: '0.65rem' }}>{isExpanded ? '▲' : '▼'}</span>
-                    </button>
-                    <button
                       onClick={() => handleDelete(report.id)}
                       disabled={loading}
                       style={{
@@ -197,8 +172,7 @@ export default function ReportsClient({ initialReports, adminProfileId, adminPro
                 </div>
 
                 {/* 댓글 영역 */}
-                {isExpanded && (
-                  <div style={{
+                <div style={{
                     borderTop: '1px solid var(--border)',
                     background: 'var(--item-bg)',
                     padding: '1rem 1.25rem',
@@ -320,8 +294,7 @@ export default function ReportsClient({ initialReports, adminProfileId, adminPro
                         {commentLoading === report.id ? '...' : '전송'}
                       </button>
                     </div>
-                  </div>
-                )}
+                </div>
               </div>
             )
           })}

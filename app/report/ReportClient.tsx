@@ -49,7 +49,6 @@ export default function ReportClient({ activeProfileId, activeProfileName, myRep
   const [loading, setLoading] = useState(false)
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [myReports, setMyReports] = useState<Report[]>(initialMyReports)
-  const [expandedId, setExpandedId] = useState<number | null>(null)
   const [commentInputs, setCommentInputs] = useState<Record<number, string>>({})
   const [commentLoading, setCommentLoading] = useState<number | null>(null)
   const router = useRouter()
@@ -332,7 +331,6 @@ export default function ReportClient({ activeProfileId, activeProfileName, myRep
           ) : (
             myReports.map((report) => {
               const comments = report.parking_report_comments || []
-              const isExpanded = expandedId === report.id
               const hasNewAdminReply = comments.some(c => c.is_admin)
 
               return (
@@ -364,26 +362,10 @@ export default function ReportClient({ activeProfileId, activeProfileName, myRep
                       {report.content}
                     </p>
 
-                    <button
-                      onClick={() => setExpandedId(isExpanded ? null : report.id)}
-                      style={{
-                        background: isExpanded ? '#eff6ff' : 'var(--item-bg)',
-                        border: `1px solid ${isExpanded ? '#bfdbfe' : 'var(--border)'}`,
-                        color: isExpanded ? '#2563eb' : 'var(--text-muted)',
-                        fontSize: '0.75rem',
-                        padding: '0.3rem 0.65rem',
-                        borderRadius: '0.5rem',
-                        cursor: 'pointer',
-                        fontWeight: 600
-                      }}
-                    >
-                      💬 {comments.length > 0 ? `댓글 ${comments.length}개` : '댓글 보기'} {isExpanded ? '▲' : '▼'}
-                    </button>
                   </div>
 
                   {/* 댓글 스레드 */}
-                  {isExpanded && (
-                    <div style={{ borderTop: '1px solid var(--border)', background: 'var(--item-bg)', padding: '0.9rem 1.1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  <div style={{ borderTop: '1px solid var(--border)', background: 'var(--item-bg)', padding: '0.9rem 1.1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                       {comments.length === 0 ? (
                         <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>아직 댓글이 없습니다.</p>
                       ) : (
@@ -438,7 +420,6 @@ export default function ReportClient({ activeProfileId, activeProfileName, myRep
                         </div>
                       )}
                     </div>
-                  )}
                 </div>
               )
             })

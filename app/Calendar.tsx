@@ -311,12 +311,10 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
                 className={dayClass}
                 onClick={() => isCurrentMonth && handleDateClick(day)}
               >
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.05rem' }}>
-                  <span className="day-number">{format(day, 'd')}</span>
-                  {holidayName && isCurrentMonth && (
-                    <span className="holiday-name">{holidayName}</span>
-                  )}
-                </div>
+                <span className="day-number">{format(day, 'd')}</span>
+                {holidayName && isCurrentMonth && (
+                  <span className="holiday-name">{holidayName}</span>
+                )}
                 <div className="usage-center-container">
                   {dayHistory.length > 0 && (
                     <div

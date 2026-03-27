@@ -223,11 +223,15 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
   const prevMonth = () => {
     setSlideDir('right')
     setAnimKey(k => k + 1)
+    setViewedMonthPerfIds([])
+    setPrevMonthPerfIds([])
     setCurrentMonth(subMonths(currentMonth, 1))
   }
   const nextMonth = () => {
     setSlideDir('left')
     setAnimKey(k => k + 1)
+    setViewedMonthPerfIds([])
+    setPrevMonthPerfIds([])
     setCurrentMonth(addMonths(currentMonth, 1))
   }
 

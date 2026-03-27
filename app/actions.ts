@@ -1,6 +1,7 @@
 'use server'
 
 import { supabase } from '@/lib/supabaseClient'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { revalidatePath } from 'next/cache'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
@@ -190,7 +191,7 @@ export async function addComment(
   content: string,
   isAdmin: boolean
 ) {
-  const { error } = await supabase
+  const { error } = await supabaseAdmin
     .from('parking_report_comments')
     .insert({ report_id: reportId, profile_id: profileId, author_name: authorName, content, is_admin: isAdmin })
   if (error) return { success: false, error: '댓글 저장 실패' }
@@ -218,7 +219,7 @@ export async function addComment(
 }
 
 export async function deleteComment(id: number) {
-  const { error } = await supabase.from('parking_report_comments').delete().eq('id', id)
+  const { error } = await supabaseAdmin.from('parking_report_comments').delete().eq('id', id)
   if (error) return { success: false, error: '삭제 실패' }
   revalidatePath('/admin/reports')
   revalidatePath('/report')
@@ -323,7 +324,7 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
     const priv = process.env.VAPID_PRIVATE_KEY;
     if (!priv) return { success: false, error: '비공개 키 없음' };
 
-    const { data: subs, error } = await supabase
+    const { data: subs, error } = await supabaseAdmin
       .from('parking_push_subscriptions')
       .select('subscription, profiles!inner(name)')
       .eq('profiles.name', '세인');
@@ -350,14 +351,14 @@ async function sendPushToReportAuthor(reportId: number, payload: { title: string
     const priv = process.env.VAPID_PRIVATE_KEY;
     if (!priv) return;
 
-    const { data: report } = await supabase
+    const { data: report } = await supabaseAdmin
       .from('parking_app_feedback')
       .select('profile_id')
       .eq('id', reportId)
       .single();
     if (!report?.profile_id) return;
 
-    const { data: subs } = await supabase
+    const { data: subs } = await supabaseAdmin
       .from('parking_push_subscriptions')
       .select('subscription')
       .eq('profile_id', report.profile_id);

@@ -124,23 +124,24 @@ body {
 .parking-card {
   background: var(--card-bg);
   border-radius: 0.75rem;
-  padding: 0.75rem 0.25rem;
+  padding: 0.5rem 0.25rem;
   box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   border: 1px solid var(--border);
-  min-height: 80px;
-  justify-content: center;
+  height: 100px;
+  justify-content: space-between;
   transition: all 0.3s ease;
 }
 
 .user-name { font-size: 0.7rem; font-weight: 700; color: var(--text-strong); opacity: 0.9; }
 .remaining { font-size: 1.25rem; font-weight: 800; color: var(--primary); line-height: 1; margin: 0.2rem 0; }
 .remaining-label { font-size: 0.6rem; color: var(--secondary); font-weight: 600; }
-.no-performance-label { font-size: 0.65rem; font-weight: 700; color: #ef4444; margin: 0.2rem 0; }
-.perf-toggle-btn { margin-top: 0.35rem; padding: 0.2rem 0.5rem; font-size: 0.55rem; font-weight: 600; border: 1px solid; border-radius: 0.4rem; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; }
+.card-middle { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; }
+.no-performance-label { font-size: 1.25rem; font-weight: 800; color: #ef4444; line-height: 1; margin: 0.2rem 0; }
+.perf-toggle-btn { margin-top: 0.35rem; padding: 0.2rem 0; font-size: 0.55rem; font-weight: 600; border: 1px solid; border-radius: 0.4rem; cursor: pointer; transition: background-color 0.2s ease, color 0.2s ease; white-space: nowrap; width: 80%; }
 .perf-toggle-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* Header Actions & Profile Card */

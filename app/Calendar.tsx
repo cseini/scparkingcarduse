@@ -318,24 +318,29 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
               style={{ borderColor: color, backgroundColor: `${color}10` }}
             >
               <h3 className="user-name" style={{ color }}>{card.user_name}</h3>
-              {hasPrevPerf ? (
-                <>
-                  <div
-                    className="remaining"
-                    style={{
-                      color,
-                      transition: 'all 0.3s ease',
-                      transform: loading ? 'scale(0.95)' : 'scale(1)',
-                      opacity: loading ? 0.7 : 1
-                    }}
-                  >
-                    {remaining}
-                  </div>
-                  <div className="remaining-label">회 남음</div>
-                </>
-              ) : (
-                <div className="no-performance-label">실적미달성</div>
-              )}
+              <div className="card-middle">
+                {hasPrevPerf ? (
+                  <>
+                    <div
+                      className="remaining"
+                      style={{
+                        color,
+                        transition: 'all 0.3s ease',
+                        transform: loading ? 'scale(0.95)' : 'scale(1)',
+                        opacity: loading ? 0.7 : 1
+                      }}
+                    >
+                      {remaining}
+                    </div>
+                    <div className="remaining-label">회 남음</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="no-performance-label">실적미달성</div>
+                    <div className="remaining-label" style={{ visibility: 'hidden' }}>회 남음</div>
+                  </>
+                )}
+              </div>
               <button
                 className={`perf-toggle-btn${hasViewedPerf ? ' achieved' : ''}`}
                 style={{ borderColor: color, color: hasViewedPerf ? '#fff' : color, backgroundColor: hasViewedPerf ? color : 'transparent' }}
@@ -343,7 +348,7 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
                 disabled={perfLoading}
                 title={`${viewedYearMonth} 실적 ${hasViewedPerf ? '달성됨 (취소하기)' : '미달성 (반영하기)'}`}
               >
-                {viewedYearMonth} {hasViewedPerf ? '실적 ✓' : '실적 없음'}
+                {hasViewedPerf ? '실적 달성 ✓' : '실적 미달성'}
               </button>
             </div>
           )

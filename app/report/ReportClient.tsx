@@ -39,11 +39,12 @@ interface ReportClientProps {
   activeProfileId?: number
   activeProfileName?: string
   myReports: Report[]
+  targetReportId?: number
 }
 
-export default function ReportClient({ activeProfileId, activeProfileName, myReports: initialMyReports }: ReportClientProps) {
+export default function ReportClient({ activeProfileId, activeProfileName, myReports: initialMyReports, targetReportId }: ReportClientProps) {
   const { showToast } = useToast()
-  const [tab, setTab] = useState<'submit' | 'myreports'>('submit')
+  const [tab, setTab] = useState<'submit' | 'myreports'>(targetReportId ? 'myreports' : 'submit')
   const [type, setType] = useState('bug')
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
@@ -53,9 +54,13 @@ export default function ReportClient({ activeProfileId, activeProfileName, myRep
   const [commentLoading, setCommentLoading] = useState<number | null>(null)
   const router = useRouter()
 
+  useEffect(() => { setMyReports(initialMyReports) }, [initialMyReports])
+
   useEffect(() => {
-    setMyReports(initialMyReports)
-  }, [initialMyReports])
+    if (!targetReportId) return
+    const el = document.getElementById(`report-${targetReportId}`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [targetReportId, tab])
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -334,12 +339,12 @@ export default function ReportClient({ activeProfileId, activeProfileName, myRep
               const hasNewAdminReply = comments.some(c => c.is_admin)
 
               return (
-                <div key={report.id} style={{
+                <div key={report.id} id={`report-${report.id}`} style={{
                   background: 'var(--card-bg)',
                   borderRadius: '1rem',
-                  border: `1px solid ${hasNewAdminReply ? '#bfdbfe' : 'var(--border)'}`,
+                  border: `1px solid ${targetReportId === report.id ? '#2563eb' : hasNewAdminReply ? '#bfdbfe' : 'var(--border)'}`,
                   overflow: 'hidden',
-                  boxShadow: 'var(--shadow)'
+                  boxShadow: targetReportId === report.id ? '0 0 0 2px #2563eb40' : 'var(--shadow)'
                 }}>
                   <div style={{ padding: '1.1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.6rem' }}>

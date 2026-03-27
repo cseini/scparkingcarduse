@@ -30,9 +30,10 @@ interface ReportsClientProps {
   initialReports: Report[]
   adminProfileId: number
   adminProfileName: string
+  targetReportId?: number
 }
 
-export default function ReportsClient({ initialReports, adminProfileId, adminProfileName }: ReportsClientProps) {
+export default function ReportsClient({ initialReports, adminProfileId, adminProfileName, targetReportId }: ReportsClientProps) {
   const [reports, setReports] = useState<Report[]>(initialReports)
   const [loading, setLoading] = useState(false)
   const [commentInputs, setCommentInputs] = useState<Record<number, string>>({})
@@ -41,6 +42,12 @@ export default function ReportsClient({ initialReports, adminProfileId, adminPro
   const router = useRouter()
 
   useEffect(() => { setReports(initialReports) }, [initialReports])
+
+  useEffect(() => {
+    if (!targetReportId) return
+    const el = document.getElementById(`report-${targetReportId}`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [targetReportId])
 
   const handleDelete = async (id: number) => {
     if (!confirm('이 리포트를 삭제하시겠습니까?')) return
@@ -112,11 +119,11 @@ export default function ReportsClient({ initialReports, adminProfileId, adminPro
             const comments = report.parking_report_comments || []
 
             return (
-              <div key={report.id} style={{
+              <div key={report.id} id={`report-${report.id}`} style={{
                 background: 'var(--card-bg)',
                 borderRadius: '1rem',
-                boxShadow: 'var(--shadow)',
-                border: '1px solid var(--border)',
+                boxShadow: targetReportId === report.id ? '0 0 0 2px #2563eb40' : 'var(--shadow)',
+                border: `1px solid ${targetReportId === report.id ? '#2563eb' : 'var(--border)'}`,
                 overflow: 'hidden'
               }}>
                 <div style={{ padding: '1.25rem' }}>

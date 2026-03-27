@@ -5,8 +5,9 @@ import { getProfiles, getMyReports } from '../actions'
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
-export default async function ReportPage() {
+export default async function ReportPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
   const cookieStore = await cookies()
+  const { id: targetId } = await searchParams
   const profiles = await getProfiles()
 
   let profileCookie = cookieStore.get('selected_profile_id')?.value
@@ -33,6 +34,7 @@ export default async function ReportPage() {
         activeProfileId={profileId}
         activeProfileName={activeProfile?.name}
         myReports={myReports}
+        targetReportId={targetId ? Number(targetId) : undefined}
       />
     </main>
   )

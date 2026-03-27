@@ -198,18 +198,16 @@ export async function addComment(
 
   // 푸시 알림 발송
   if (isAdmin) {
-    // 세인이 댓글 → 리포트 작성자에게 푸시
     await sendPushToReportAuthor(reportId, {
       title: '💬 세인님의 답글',
       body: content.length > 60 ? content.substring(0, 60) + '...' : content,
-      url: '/report'
+      url: `/report?id=${reportId}`
     })
   } else {
-    // 일반 사용자가 댓글 → 세인에게 푸시
     await sendPushToSein({
       title: `💬 ${authorName}님의 댓글`,
       body: content.length > 60 ? content.substring(0, 60) + '...' : content,
-      url: '/admin/reports'
+      url: `/admin/reports?id=${reportId}`
     })
   }
 

@@ -216,6 +216,15 @@ body {
 .calendar-header h2 { font-size: 1rem; font-weight: 800; color: var(--text-strong); }
 .nav-btn { background: var(--nav-btn-bg); color: var(--foreground); border: 1px solid var(--border); border-radius: 0.4rem; padding: 0.4rem 0.7rem; cursor: pointer; font-weight: 800; transition: all 0.2s; }
 
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(-40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -225,6 +234,8 @@ body {
   border-radius: 0.75rem;
   overflow: hidden;
 }
+.calendar-grid.slide-left  { animation: slideInLeft  0.25s cubic-bezier(0.4,0,0.2,1) both; }
+.calendar-grid.slide-right { animation: slideInRight 0.25s cubic-bezier(0.4,0,0.2,1) both; }
 
 .calendar-day-label {
   background: var(--item-bg);
@@ -254,7 +265,7 @@ body {
 .calendar-day.holiday .day-number { color: #ef4444; }
 .calendar-day.saturday .day-number { color: #3b82f6; }
 .day-number { font-size: 0.7rem; font-weight: 600; color: var(--foreground); }
-.holiday-name { font-size: 0.5rem; color: #ef4444; font-weight: 700; margin-top: 0.1rem; text-align: right; }
+.holiday-name { font-size: 0.62rem; color: #ef4444; font-weight: 700; text-align: center; line-height: 1.2; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .usage-center-container { flex: 1; display: flex; align-items: center; justify-content: center; padding: 0.05rem; }
 .usage-tag-prominent {

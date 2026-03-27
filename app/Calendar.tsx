@@ -124,6 +124,8 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedHistory, setSelectedHistory] = useState<UsageRecord | null>(null)
   const [loading, setLoading] = useState(false)
+  const [slideDir, setSlideDir] = useState<'left' | 'right' | null>(null)
+  const [animKey, setAnimKey] = useState(0)
 
   const { showToast } = useToast()
 
@@ -165,8 +167,16 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
 
   const days = eachDayOfInterval({ start: startDate, end: endDate })
 
-  const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1))
-  const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
+  const prevMonth = () => {
+    setSlideDir('right')
+    setAnimKey(k => k + 1)
+    setCurrentMonth(subMonths(currentMonth, 1))
+  }
+  const nextMonth = () => {
+    setSlideDir('left')
+    setAnimKey(k => k + 1)
+    setCurrentMonth(addMonths(currentMonth, 1))
+  }
 
   const touchStartX = useRef<number | null>(null)
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -277,7 +287,7 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
           <button onClick={nextMonth} className="nav-btn">&gt;</button>
         </div>
 
-        <div className="calendar-grid">
+        <div key={animKey} className={`calendar-grid${slideDir ? ` slide-${slideDir}` : ''}`}>
           {['일', '월', '화', '수', '목', '금', '토'].map((day, index) => (
             <div key={day} className={`calendar-day-label ${index === 0 ? 'sunday-label' : ''} ${index === 6 ? 'saturday-label' : ''}`}>
               {day}
@@ -301,7 +311,7 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
                 className={dayClass}
                 onClick={() => isCurrentMonth && handleDateClick(day)}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.05rem' }}>
                   <span className="day-number">{format(day, 'd')}</span>
                   {holidayName && isCurrentMonth && (
                     <span className="holiday-name">{holidayName}</span>

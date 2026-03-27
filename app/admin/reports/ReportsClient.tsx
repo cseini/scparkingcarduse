@@ -74,16 +74,20 @@ export default function ReportsClient({ initialReports, adminProfileId, adminPro
     const content = commentInputs[reportId]?.trim()
     if (!content) return
     setCommentLoading(reportId)
+    const tempComment = { id: Date.now(), author_name: adminProfileName, content, is_admin: true, created_at: new Date().toISOString(), profile_id: adminProfileId }
+    setReports(prev => prev.map(r => r.id === reportId ? { ...r, parking_report_comments: [...(r.parking_report_comments || []), tempComment] } : r))
+    setCommentInputs(prev => ({ ...prev, [reportId]: '' }))
     try {
       const result = await addComment(reportId, adminProfileId, adminProfileName, content, true)
       if (result.success) {
-        setCommentInputs(prev => ({ ...prev, [reportId]: '' }))
-        showToast('답글을 전송했습니다.', 'success')
         router.refresh()
       } else {
+        setReports(prev => prev.map(r => r.id === reportId ? { ...r, parking_report_comments: (r.parking_report_comments || []).filter(c => c.id !== tempComment.id) } : r))
+        setCommentInputs(prev => ({ ...prev, [reportId]: content }))
         showToast(result.error || '답글 저장 실패', 'error')
       }
     } catch {
+      setReports(prev => prev.map(r => r.id === reportId ? { ...r, parking_report_comments: (r.parking_report_comments || []).filter(c => c.id !== tempComment.id) } : r))
       showToast('오류가 발생했습니다.', 'error')
     } finally {
       setCommentLoading(null)

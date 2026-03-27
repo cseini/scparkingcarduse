@@ -133,7 +133,7 @@ export default function ReportClient({ activeProfileId, activeProfileName, myRep
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!content.trim() || loading) return
     setLoading(true)
@@ -158,16 +158,21 @@ export default function ReportClient({ activeProfileId, activeProfileName, myRep
     const text = commentInputs[reportId]?.trim()
     if (!text || !activeProfileId || !activeProfileName) return
     setCommentLoading(reportId)
+    // 낙관적 업데이트
+    const tempComment = { id: Date.now(), author_name: activeProfileName, content: text, is_admin: false, created_at: new Date().toISOString(), profile_id: activeProfileId }
+    setMyReports(prev => prev.map(r => r.id === reportId ? { ...r, parking_report_comments: [...(r.parking_report_comments || []), tempComment] } : r))
+    setCommentInputs(prev => ({ ...prev, [reportId]: '' }))
     try {
       const result = await addComment(reportId, activeProfileId, activeProfileName, text, false)
       if (result.success) {
-        setCommentInputs(prev => ({ ...prev, [reportId]: '' }))
-        showToast('댓글을 남겼습니다.', 'success')
         router.refresh()
       } else {
+        setMyReports(prev => prev.map(r => r.id === reportId ? { ...r, parking_report_comments: (r.parking_report_comments || []).filter(c => c.id !== tempComment.id) } : r))
+        setCommentInputs(prev => ({ ...prev, [reportId]: text }))
         showToast(result.error || '댓글 저장 실패', 'error')
       }
     } catch {
+      setMyReports(prev => prev.map(r => r.id === reportId ? { ...r, parking_report_comments: (r.parking_report_comments || []).filter(c => c.id !== tempComment.id) } : r))
       showToast('오류가 발생했습니다.', 'error')
     } finally {
       setCommentLoading(null)

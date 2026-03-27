@@ -30,6 +30,8 @@ interface ProfileManagerModalProps {
 }
 
 export default function ProfileManagerModal({ profiles, activeProfileId, onClose }: ProfileManagerModalProps) {
+  const activeProfile = profiles.find(p => p.id === activeProfileId)
+  const isAdmin = activeProfile?.name === '세인'
   const { showToast } = useToast()
   const [newName, setNewName] = useState('')
   const [newPin, setNewPin] = useState('')
@@ -275,7 +277,9 @@ export default function ProfileManagerModal({ profiles, activeProfileId, onClose
                       <span style={{ fontWeight: 600 }}>{p.name}</span>
                       <div className="card-actions">
                         <button onClick={() => { setEditingId(p.id); setEditName(p.name); }} className="edit-button">수정</button>
-                        <button onClick={() => handleDelete(p.id, p.name)} className="delete-button">삭제</button>
+                        {(isAdmin || p.id === activeProfileId) && (
+                          <button onClick={() => handleDelete(p.id, p.name)} className="delete-button">삭제</button>
+                        )}
                       </div>
                     </div>
                   )}

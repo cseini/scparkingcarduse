@@ -315,9 +315,9 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
             <div
               key={card.id}
               className={`parking-card${hasPrevPerf ? '' : ' card-disabled'}`}
-              style={hasPrevPerf ? { borderColor: color, backgroundColor: `${color}10` } : undefined}
+              style={{ borderColor: color, backgroundColor: hasPrevPerf ? `${color}10` : `${color}18` }}
             >
-              <h3 className="user-name" style={hasPrevPerf ? { color } : undefined}>{card.user_name}</h3>
+              <h3 className="user-name" style={{ color, opacity: hasPrevPerf ? 1 : 0.5 }}>{card.user_name}</h3>
               <div className="card-middle">
                 {hasPrevPerf ? (
                   <>
@@ -418,17 +418,18 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
                   const usedCount = history.filter(h => h.card_id === card.id).length
                   const hasPrevPerf = prevMonthPerfIds.includes(card.id)
                   const remaining = hasPrevPerf ? Math.max(0, 3 - usedCount) : 0
+                  const isDisabled = loading || remaining <= 0
                   return (
                     <button
                       key={card.id}
-                      className="modal-use-button"
-                      style={{ borderColor: color }}
+                      className={`modal-use-button${isDisabled ? ' modal-use-button-disabled' : ''}`}
+                      style={isDisabled ? undefined : { borderColor: color }}
                       onClick={() => handleUseCard(card.id)}
-                      disabled={loading || remaining <= 0}
+                      disabled={isDisabled}
                     >
-                      <span className="button-user-name" style={{ color }}>{card.user_name}</span>
-                      <span className="button-remaining" style={{ transition: 'all 0.3s ease' }}>
-                        {hasPrevPerf ? `(${remaining}회 남음)` : '(실적미달성)'}
+                      <span className="button-user-name" style={isDisabled ? undefined : { color }}>{card.user_name}</span>
+                      <span className="button-remaining">
+                        {!hasPrevPerf ? '전월 실적 미달성' : remaining === 0 ? '0회 남음' : `${remaining}회 남음`}
                       </span>
                     </button>
                   )

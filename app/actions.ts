@@ -391,3 +391,41 @@ export async function saveSubscription(profileId: number | null, subscription: a
 }
 
 export async function checkAutoReset(profileId: number) { return; }
+
+// ---------------------------------------------------------
+// 카드 월간 실적 관리
+// ---------------------------------------------------------
+
+export async function getCardPerformance(cardIds: number[], yearMonth: string): Promise<number[]> {
+  if (cardIds.length === 0) return []
+  const { data } = await supabaseAdmin
+    .from('parking_card_performance')
+    .select('card_id')
+    .in('card_id', cardIds)
+    .eq('year_month', yearMonth)
+  return (data || []).map((d: any) => d.card_id)
+}
+
+export async function toggleCardPerformance(cardId: number, yearMonth: string, achieved: boolean) {
+  if (achieved) {
+    const { error } = await supabaseAdmin
+      .from('parking_card_performance')
+      .upsert({ card_id: cardId, year_month: yearMonth }, { onConflict: 'card_id,year_month' })
+    if (error) {
+      console.error('[toggleCardPerformance] upsert error:', error)
+      return { success: false, error: `실적 저장 실패: ${error.message}` }
+    }
+  } else {
+    const { error } = await supabaseAdmin
+      .from('parking_card_performance')
+      .delete()
+      .eq('card_id', cardId)
+      .eq('year_month', yearMonth)
+    if (error) {
+      console.error('[toggleCardPerformance] delete error:', error)
+      return { success: false, error: `실적 취소 실패: ${error.message}` }
+    }
+  }
+  revalidatePath('/')
+  return { success: true }
+}

@@ -17,7 +17,7 @@ import {
 } from 'date-fns'
 import { ko } from 'date-fns/locale/ko'
 import { toZonedTime } from 'date-fns-tz'
-import { useParkingCard, deleteUsageHistory, checkAutoReset, getUsageHistory } from './actions'
+import { useParkingCard, deleteUsageHistory, checkAutoReset, getUsageHistory, getCardPerformance, toggleCardPerformance } from './actions'
 import { useToast } from './Toast'
 
 const TIMEZONE = 'Asia/Seoul'
@@ -114,9 +114,12 @@ interface ParkingCardData {
 interface CalendarProps {
   cards: ParkingCardData[]
   history: UsageRecord[]
+  initialThisMonthPerfIds: number[]
+  initialPrevMonthPerfIds: number[]
+  serverNowYearMonth: string
 }
 
-export default function Calendar({ cards, history: initialHistory }: CalendarProps) {
+export default function Calendar({ cards, history: initialHistory, initialThisMonthPerfIds, initialPrevMonthPerfIds, serverNowYearMonth }: CalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(toZonedTime(new Date(), TIMEZONE))
   const [history, setHistory] = useState<UsageRecord[]>(initialHistory)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -126,6 +129,12 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
   const [loading, setLoading] = useState(false)
   const [slideDir, setSlideDir] = useState<'left' | 'right' | null>(null)
   const [animKey, setAnimKey] = useState(0)
+
+  // Performance state: card IDs that achieved performance for the viewed month and for prev month
+  const viewedYearMonth = format(currentMonth, 'yyyy-MM')
+  const [viewedMonthPerfIds, setViewedMonthPerfIds] = useState<number[]>(initialThisMonthPerfIds)
+  const [prevMonthPerfIds, setPrevMonthPerfIds] = useState<number[]>(initialPrevMonthPerfIds)
+  const [perfLoading, setPerfLoading] = useState(false)
 
   const { showToast } = useToast()
 
@@ -159,6 +168,50 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
       checkAutoReset(cards[0].profile_id)
     }
   }, [cards])
+
+  // Refresh performance data whenever viewed month changes
+  useEffect(() => {
+    const cardIds = cards.map(c => c.id)
+    if (cardIds.length === 0) return
+    const vm = format(currentMonth, 'yyyy-MM')
+    const pm = format(subMonths(currentMonth, 1), 'yyyy-MM')
+    // If viewing current server month, use initial server-fetched data
+    Promise.all([
+      getCardPerformance(cardIds, vm),
+      getCardPerformance(cardIds, pm),
+    ]).then(([vp, pp]) => {
+      setViewedMonthPerfIds(vp)
+      setPrevMonthPerfIds(pp)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonth, cards])
+
+  const handleTogglePerformance = async (cardId: number) => {
+    if (perfLoading) return
+    const isAchieved = viewedMonthPerfIds.includes(cardId)
+    setPerfLoading(true)
+    // Optimistic update
+    setViewedMonthPerfIds(prev =>
+      isAchieved ? prev.filter(id => id !== cardId) : [...prev, cardId]
+    )
+    try {
+      const result = await toggleCardPerformance(cardId, viewedYearMonth, !isAchieved)
+      if (!result.success) {
+        // Revert on failure
+        setViewedMonthPerfIds(prev =>
+          isAchieved ? [...prev, cardId] : prev.filter(id => id !== cardId)
+        )
+        showToast(result.error || '실적 변경 실패', 'error')
+      }
+    } catch {
+      setViewedMonthPerfIds(prev =>
+        isAchieved ? [...prev, cardId] : prev.filter(id => id !== cardId)
+      )
+      showToast('오류가 발생했습니다.', 'error')
+    } finally {
+      setPerfLoading(false)
+    }
+  }
 
   const monthStart = startOfMonth(currentMonth)
   const monthEnd = endOfMonth(monthStart)
@@ -256,6 +309,8 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
           const color = card.color || '#cbd5e1'
           const usedCount = history.filter(h => h.card_id === card.id).length
           const remaining = Math.max(0, 3 - usedCount)
+          const hasPrevPerf = prevMonthPerfIds.includes(card.id)
+          const hasViewedPerf = viewedMonthPerfIds.includes(card.id)
           return (
             <div
               key={card.id}
@@ -263,18 +318,33 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
               style={{ borderColor: color, backgroundColor: `${color}10` }}
             >
               <h3 className="user-name" style={{ color }}>{card.user_name}</h3>
-              <div
-                className="remaining"
-                style={{
-                  color,
-                  transition: 'all 0.3s ease',
-                  transform: loading ? 'scale(0.95)' : 'scale(1)',
-                  opacity: loading ? 0.7 : 1
-                }}
+              {hasPrevPerf ? (
+                <>
+                  <div
+                    className="remaining"
+                    style={{
+                      color,
+                      transition: 'all 0.3s ease',
+                      transform: loading ? 'scale(0.95)' : 'scale(1)',
+                      opacity: loading ? 0.7 : 1
+                    }}
+                  >
+                    {remaining}
+                  </div>
+                  <div className="remaining-label">회 남음</div>
+                </>
+              ) : (
+                <div className="no-performance-label">실적미달성</div>
+              )}
+              <button
+                className={`perf-toggle-btn${hasViewedPerf ? ' achieved' : ''}`}
+                style={{ borderColor: color, color: hasViewedPerf ? '#fff' : color, backgroundColor: hasViewedPerf ? color : 'transparent' }}
+                onClick={() => handleTogglePerformance(card.id)}
+                disabled={perfLoading}
+                title={`${viewedYearMonth} 실적 ${hasViewedPerf ? '달성됨 (취소하기)' : '미달성 (반영하기)'}`}
               >
-                {remaining}
-              </div>
-              <div className="remaining-label">회 남음</div>
+                {viewedYearMonth} {hasViewedPerf ? '실적 ✓' : '실적 없음'}
+              </button>
             </div>
           )
         })}
@@ -341,7 +411,8 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
                 {cards.map((card) => {
                   const color = card.color || '#cbd5e1'
                   const usedCount = history.filter(h => h.card_id === card.id).length
-                  const remaining = Math.max(0, 3 - usedCount)
+                  const hasPrevPerf = prevMonthPerfIds.includes(card.id)
+                  const remaining = hasPrevPerf ? Math.max(0, 3 - usedCount) : 0
                   return (
                     <button
                       key={card.id}
@@ -352,7 +423,7 @@ export default function Calendar({ cards, history: initialHistory }: CalendarPro
                     >
                       <span className="button-user-name" style={{ color }}>{card.user_name}</span>
                       <span className="button-remaining" style={{ transition: 'all 0.3s ease' }}>
-                        ({remaining}회 남음)
+                        {hasPrevPerf ? `(${remaining}회 남음)` : '(실적미달성)'}
                       </span>
                     </button>
                   )

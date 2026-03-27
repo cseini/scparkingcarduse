@@ -139,6 +139,9 @@ body {
 .user-name { font-size: 0.7rem; font-weight: 700; color: var(--text-strong); opacity: 0.9; }
 .remaining { font-size: 1.25rem; font-weight: 800; color: var(--primary); line-height: 1; margin: 0.2rem 0; }
 .remaining-label { font-size: 0.6rem; color: var(--secondary); font-weight: 600; }
+.no-performance-label { font-size: 0.65rem; font-weight: 700; color: #ef4444; margin: 0.2rem 0; }
+.perf-toggle-btn { margin-top: 0.35rem; padding: 0.2rem 0.5rem; font-size: 0.55rem; font-weight: 600; border: 1px solid; border-radius: 0.4rem; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; }
+.perf-toggle-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* Header Actions & Profile Card */
 .header-actions { display: flex; align-items: center; gap: 0.6rem; }

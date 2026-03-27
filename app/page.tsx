@@ -1,8 +1,8 @@
 import { supabase } from '@/lib/supabaseClient'
 import Calendar from './Calendar'
-import { getUsageHistory, getProfiles } from './actions'
+import { getUsageHistory, getProfiles, getCardPerformance } from './actions'
 import { cookies } from 'next/headers'
-import { startOfMonth, endOfMonth } from 'date-fns'
+import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
@@ -52,6 +52,14 @@ export default async function Home() {
   const cards = await getParkingCards(profileId)
   const history = await getUsageHistory(now.getFullYear(), now.getMonth() + 1, profileId)
 
+  const cardIds = cards.map((c: any) => c.id)
+  const thisMonth = format(now, 'yyyy-MM')
+  const prevMonth = format(subMonths(now, 1), 'yyyy-MM')
+  const [initialThisMonthPerfIds, initialPrevMonthPerfIds] = await Promise.all([
+    getCardPerformance(cardIds, thisMonth),
+    getCardPerformance(cardIds, prevMonth),
+  ])
+
   // 프로필이 선택되지 않았을 때와 선택되었으나 카드가 없을 때를 명확히 구분
   const isProfileNotSelected = !profileId || isNaN(profileId)
   const isCardsEmpty = cards.length === 0
@@ -75,7 +83,13 @@ export default async function Home() {
           <p style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>[카드 관리] 메뉴에서 카드를 등록해 주세요.</p>
         </div>
       ) : (
-        <Calendar cards={cards} history={history} />
+        <Calendar
+          cards={cards}
+          history={history}
+          initialThisMonthPerfIds={initialThisMonthPerfIds}
+          initialPrevMonthPerfIds={initialPrevMonthPerfIds}
+          serverNowYearMonth={thisMonth}
+        />
       )}
     </main>
   )

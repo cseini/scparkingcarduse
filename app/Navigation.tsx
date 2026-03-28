@@ -117,12 +117,21 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
       <header className="header">
         <div className="header-content">
           <Link href="/" className="logo">
-            <svg className="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect width="24" height="24" rx="6" fill="#2563eb"/>
-              <path d="M17 12H13.5V17H10.5V7H14.5C15.8807 7 17 8.11929 17 9.5V12ZM13.5 9.5V11.5H14.5C15.0523 11.5 15.5 11.0523 15.5 10.5C15.5 9.94772 15.0523 9.5 14.5 9.5H13.5Z" fill="white"/>
-              <path opacity="0.3" d="M19 19L5 19" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+            <svg className="logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="logoGrad" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="#3b82f6"/>
+                  <stop offset="100%" stopColor="#6366f1"/>
+                </linearGradient>
+              </defs>
+              <rect width="32" height="32" rx="9" fill="url(#logoGrad)"/>
+              <text x="16" y="23" textAnchor="middle" fontSize="21" fontWeight="900" fill="white" fontFamily="Arial, Helvetica, sans-serif">P</text>
+              <rect x="6" y="27.5" width="20" height="2" rx="1" fill="rgba(255,255,255,0.35)"/>
             </svg>
-            <span style={{ fontWeight: 900, color: 'var(--text-strong)', fontSize: '1.1rem', letterSpacing: '-0.02em' }}>SC PARKING</span>
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, gap: '1px' }}>
+              <span style={{ fontWeight: 900, color: 'var(--primary)', fontSize: '1rem', letterSpacing: '-0.01em' }}>SC</span>
+              <span style={{ fontWeight: 500, color: 'var(--text-muted)', fontSize: '0.65rem', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Parking</span>
+            </div>
           </Link>
           
           <div className="header-actions">

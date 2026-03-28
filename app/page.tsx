@@ -67,20 +67,45 @@ export default async function Home() {
   return (
     <main className="container">
       {isProfileNotSelected ? (
-        <div style={{ textAlign: 'center', padding: '3rem', background: '#f8fafc', borderRadius: '1rem', color: '#64748b', border: '1px dashed #cbd5e1' }}>
+        <div style={{ textAlign: 'center', padding: '3rem 2rem', background: 'var(--card-bg)', borderRadius: '1.25rem', color: 'var(--text-muted)', border: '1.5px dashed var(--border)', marginTop: '1.5rem' }}>
           {profiles.length === 0 ? (
-            <p>프로필이 없습니다. 상단 프로필 버튼을 눌러 프로필을 먼저 생성해 주세요.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+              <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="56" height="56" rx="16" fill="#f1f5f9"/>
+                <circle cx="28" cy="22" r="9" stroke="#94a3b8" strokeWidth="2.5" fill="none"/>
+                <path d="M19 40c0-5 4.03-9 9-9s9 4 9 9" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+                <path d="M33 18l5-5m0 0l-5-5m5 5h-7" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <p style={{ fontWeight: 600, color: 'var(--text-strong)', fontSize: '1rem' }}>프로필이 없습니다</p>
+              <p style={{ fontSize: '0.875rem' }}>상단 프로필 버튼을 눌러 프로필을 먼저 생성해 주세요.</p>
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-              <p style={{ fontWeight: 600, color: '#1e293b' }}>환영합니다! 👋</p>
-              <p>서비스 이용을 위해 프로필을 선택해 주세요.</p>
+              <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="64" height="64" rx="18" fill="#eff6ff"/>
+                <rect x="12" y="12" width="40" height="40" rx="10" fill="#dbeafe"/>
+                <text x="32" y="42" textAnchor="middle" fontSize="28" fontWeight="900" fill="#3b82f6" fontFamily="Arial, Helvetica, sans-serif">P</text>
+                <rect x="14" y="49" width="36" height="3" rx="1.5" fill="#93c5fd"/>
+              </svg>
+              <p style={{ fontWeight: 700, color: 'var(--text-strong)', fontSize: '1.1rem' }}>SC Parking에 오신 걸 환영합니다!</p>
+              <p style={{ fontSize: '0.875rem' }}>서비스 이용을 위해 프로필을 선택해 주세요.</p>
             </div>
           )}
         </div>
       ) : isCardsEmpty ? (
-        <div style={{ textAlign: 'center', padding: '3rem', background: '#fef3c7', borderRadius: '1rem', color: '#92400e', border: '1px solid #fde68a' }}>
-          <p>선택된 프로필에 카드가 존재하지 않습니다.</p>
-          <p style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>[카드 관리] 메뉴에서 카드를 등록해 주세요.</p>
+        <div style={{ textAlign: 'center', padding: '3rem 2rem', background: 'var(--card-bg)', borderRadius: '1.25rem', color: 'var(--text-muted)', border: '1.5px dashed #fbbf24', marginTop: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+            <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="60" height="60" rx="16" fill="#fef9c3"/>
+              <rect x="10" y="19" width="40" height="27" rx="5" stroke="#f59e0b" strokeWidth="2.5" fill="none"/>
+              <path d="M10 27h40" stroke="#f59e0b" strokeWidth="2.5"/>
+              <circle cx="19" cy="35" r="3" fill="#f59e0b"/>
+              <rect x="27" y="33" width="14" height="4" rx="2" fill="#fde68a"/>
+              <path d="M30 12v7M27 15l3-3 3 3" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <p style={{ fontWeight: 700, color: 'var(--text-strong)', fontSize: '1rem' }}>등록된 카드가 없습니다</p>
+            <p style={{ fontSize: '0.875rem' }}>[카드 관리] 메뉴에서 카드를 등록해 주세요.</p>
+          </div>
         </div>
       ) : (
         <Calendar

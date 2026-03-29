@@ -2,11 +2,10 @@ import { supabase } from '@/lib/supabaseClient'
 import ManageClient from './ManageClient'
 import { getProfiles } from '../actions'
 import { cookies } from 'next/headers'
+import { startOfMonth, endOfMonth } from 'date-fns'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
-
-import { startOfMonth, endOfMonth } from 'date-fns'
 
 async function getParkingCards(profileId?: number) {
   if (!profileId) return []
@@ -33,8 +32,8 @@ async function getParkingCards(profileId?: number) {
     .gte('used_at', start)
     .lte('used_at', end)
 
-  return cards.map((card: any) => {
-    const usedCount = history?.filter((h: any) => h.card_id === card.id).length || 0
+  return cards.map((card: { id: number; user_name: string; profile_id: number | null; color: string }) => {
+    const usedCount = history?.filter((h: { card_id: number }) => h.card_id === card.id).length || 0
     return {
       ...card,
       remaining_uses: Math.max(0, 3 - usedCount)
@@ -55,7 +54,7 @@ export default async function ManagePage() {
 
   const profileId = profileCookie ? Number(profileCookie) : undefined
   const cards = await getParkingCards(profileId)
-  const activeProfile = profiles.find((p: any) => p.id === profileId)
+  const activeProfile = profiles.find((p: { id: number; name: string }) => p.id === profileId)
 
   return (
     <main className="container">

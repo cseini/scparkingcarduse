@@ -32,8 +32,8 @@ async function getParkingCards(profileId?: number) {
     .gte('used_at', start)
     .lte('used_at', end)
 
-  return cards.map((card: any) => {
-    const usedCount = history?.filter((h: any) => h.card_id === card.id).length || 0
+  return cards.map((card: { id: number; user_name: string; profile_id: number | null; color: string }) => {
+    const usedCount = history?.filter((h: { card_id: number }) => h.card_id === card.id).length || 0
     return {
       ...card,
       remaining_uses: Math.max(0, 3 - usedCount)
@@ -52,7 +52,7 @@ export default async function Home() {
   const cards = await getParkingCards(profileId)
   const history = await getUsageHistory(now.getFullYear(), now.getMonth() + 1, profileId)
 
-  const cardIds = cards.map((c: any) => c.id)
+  const cardIds = cards.map((c: { id: number }) => c.id)
   const thisMonth = format(now, 'yyyy-MM')
   const prevMonth = format(subMonths(now, 1), 'yyyy-MM')
   const [initialThisMonthPerfIds, initialPrevMonthPerfIds] = await Promise.all([

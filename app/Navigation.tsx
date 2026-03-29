@@ -7,6 +7,7 @@ import Cookies from 'js-cookie'
 import ProfileManagerModal from './ProfileManagerModal'
 import ThemeToggle from './ThemeToggle'
 import { checkProfilePin, setProfileCookieAction } from './actions'
+import { ADMIN_NAME } from './constants'
 
 interface Profile {
   id: number
@@ -29,6 +30,11 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
   const [pinInput, setPinInput] = useState('')
   const [pinLoading, setPinLoading] = useState(false)
   const [pinError, setPinError] = useState('')
+  const [pinAttempts, setPinAttempts] = useState(0)
+  const [pinLockedUntil, setPinLockedUntil] = useState<number | null>(null)
+
+  const PIN_MAX_ATTEMPTS = 5
+  const PIN_LOCKOUT_MS = 30_000
 
   const pathname = usePathname()
   const router = useRouter()
@@ -55,6 +61,8 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
     setTargetProfile(profile)
     setPinInput('')
     setPinError('')
+    setPinAttempts(0)
+    setPinLockedUntil(null)
     setIsPinModalOpen(true)
   }
 
@@ -74,30 +82,35 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
     e.preventDefault()
     if (!targetProfile || pinInput.length !== 4 || pinLoading) return
 
+    if (pinLockedUntil && Date.now() < pinLockedUntil) {
+      const remaining = Math.ceil((pinLockedUntil - Date.now()) / 1000)
+      setPinError(`너무 많이 시도했습니다. ${remaining}초 후 다시 시도해 주세요.`)
+      return
+    }
+
     setPinLoading(true)
     setPinError('')
     try {
       const result = await checkProfilePin(targetProfile.id, pinInput)
       if (result.success) {
         const idStr = targetProfile.id.toString()
-        
-        // 클라이언트 사이드 쿠키 즉시 설정
         Cookies.set('selected_profile_id', idStr, { expires: 365, path: '/' })
-        
-        // 서버 사이드 쿠키 설정 액션 호출
         await setProfileCookieAction(idStr)
-        
-        // 로컬 상태 업데이트
         setSelectedProfileId(idStr)
-        
         setIsPinModalOpen(false)
         setIsProfileModalOpen(false)
         setPinInput('')
-
-        // router.refresh() 대신 확실한 전체 새로고침 사용
-        window.location.reload()
+        setPinAttempts(0)
+        router.refresh()
       } else {
-        setPinError(result.error || '핀코드가 일치하지 않습니다.')
+        const newAttempts = pinAttempts + 1
+        setPinAttempts(newAttempts)
+        if (newAttempts >= PIN_MAX_ATTEMPTS) {
+          setPinLockedUntil(Date.now() + PIN_LOCKOUT_MS)
+          setPinError(`5회 오류. 30초 동안 잠겨 있습니다.`)
+        } else {
+          setPinError(`핀코드가 일치하지 않습니다. (${newAttempts}/${PIN_MAX_ATTEMPTS})`)
+        }
         setPinInput('')
       }
     } catch (err) {
@@ -183,7 +196,7 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
               <li>
                 <Link href="/report" className={`menu-item ${pathname === '/report' ? 'active' : ''}`} onClick={toggleMenu}>버그 리포트</Link>
               </li>
-              {activeName === '세인' && (
+              {activeName === ADMIN_NAME && (
                 <li>
                   <Link href="/admin/reports" className={`menu-item ${pathname === '/admin/reports' ? 'active' : ''}`} onClick={toggleMenu}>🐞 제보 목록 (Admin)</Link>
                 </li>
@@ -235,8 +248,8 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
             <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>PIN 코드 입력</h3>
             <p className="modal-subtitle" style={{ fontSize: '0.75rem', marginBottom: '1.25rem' }}>[{targetProfile.name}] 프로필의 핀코드를 입력하세요.</p>
             <form onSubmit={handlePinSubmit}>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 inputMode="numeric"
                 pattern="[0-9]*"
                 maxLength={4}
@@ -246,21 +259,21 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
                   setPinError('');
                 }}
                 className="input-field"
-                style={{ 
-                  fontSize: '1.5rem', 
-                  textAlign: 'center', 
-                  letterSpacing: '0.4rem', 
+                style={{
+                  fontSize: '1.5rem',
+                  textAlign: 'center',
+                  letterSpacing: '0.4rem',
                   marginBottom: pinError ? '0.5rem' : '1.25rem',
                   borderColor: pinError ? '#ef4444' : 'var(--border)',
                   width: '100%',
                   padding: '0.5rem'
                 }}
                 autoFocus
-                disabled={pinLoading}
+                disabled={pinLoading || (pinLockedUntil !== null && Date.now() < pinLockedUntil)}
               />
               {pinError && <p style={{ color: '#ef4444', fontSize: '0.7rem', marginBottom: '1rem' }}>{pinError}</p>}
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button type="submit" className="add-button" style={{ flex: 1, fontSize: '0.85rem' }} disabled={pinInput.length !== 4 || pinLoading}>
+                <button type="submit" className="add-button" style={{ flex: 1, fontSize: '0.85rem' }} disabled={pinInput.length !== 4 || pinLoading || (pinLockedUntil !== null && Date.now() < pinLockedUntil)}>
                   {pinLoading ? '확인 중...' : '확인'}
                 </button>
                 <button type="button" className="modal-close" style={{ flex: 1, marginTop: 0, fontSize: '0.85rem' }} onClick={() => setIsPinModalOpen(false)}>취소</button>

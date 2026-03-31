@@ -1,12 +1,9 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import Navigation from "./Navigation";
 import { getProfiles } from "./actions";
 import { cookies } from "next/headers";
 import { ToastProvider } from "./Toast";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "SC 주차 관리",
@@ -46,7 +43,7 @@ export default async function RootLayout({
           `,
         }} />
       </head>
-      <body className={inter.className}>
+      <body>
         <ToastProvider>
           <Navigation profiles={profiles} initialProfileId={selectedProfileId} />
           {children}

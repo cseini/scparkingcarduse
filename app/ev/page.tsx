@@ -4,7 +4,7 @@ import { toZonedTime } from 'date-fns-tz'
 import { getEvTransactions, getEvCardStatuses, getMonthlyProviderTotals, getLastSyncedAt } from './actions'
 import EVDashboard from './EVDashboard'
 
-export const runtime = 'nodejs'
+export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {

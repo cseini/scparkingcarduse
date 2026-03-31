@@ -2,6 +2,7 @@ import { getReports, getProfiles } from '../../actions'
 import { cookies } from 'next/headers'
 import ReportsClient from './ReportsClient'
 import { redirect } from 'next/navigation'
+import { ADMIN_NAME } from '../../constants'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
@@ -12,9 +13,9 @@ export default async function AdminReportsPage({ searchParams }: { searchParams:
   const profiles = await getProfiles()
   const selectedProfileId = cookieStore.get('selected_profile_id')?.value
 
-  const currentProfile = profiles.find((p: any) => p.id.toString() === selectedProfileId)
+  const currentProfile = profiles.find((p: { id: number; name: string }) => p.id.toString() === selectedProfileId)
 
-  if (!currentProfile || currentProfile.name !== '세인') {
+  if (!currentProfile || currentProfile.name !== ADMIN_NAME) {
     redirect('/')
   }
 

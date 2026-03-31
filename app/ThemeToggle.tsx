@@ -8,10 +8,14 @@ export default function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>('auto')
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') as Theme | null
-    const initialTheme = savedTheme || 'auto'
-    setTheme(initialTheme)
-    applyTheme(initialTheme)
+    try {
+      const savedTheme = localStorage.getItem('theme') as Theme | null
+      const initialTheme = savedTheme || 'auto'
+      setTheme(initialTheme)
+      applyTheme(initialTheme)
+    } catch {
+      applyTheme('auto')
+    }
   }, [])
 
   const applyTheme = (t: Theme) => {
@@ -26,7 +30,11 @@ export default function ThemeToggle() {
 
     setTheme(nextTheme)
     applyTheme(nextTheme)
-    localStorage.setItem('theme', nextTheme)
+    try {
+      localStorage.setItem('theme', nextTheme)
+    } catch {
+      // 프라이빗 브라우징 등 localStorage 사용 불가 환경 무시
+    }
   }
 
   return (

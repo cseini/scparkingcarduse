@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { addProfile, updateProfile, deleteProfile, saveSubscription } from './actions'
 import { useToast } from './Toast'
+import { ADMIN_NAME } from './constants'
 
 // VAPID 키를 Uint8Array로 변환하는 유틸리티 함수
 function urlBase64ToUint8Array(base64String: string) {
@@ -31,7 +32,7 @@ interface ProfileManagerModalProps {
 
 export default function ProfileManagerModal({ profiles, activeProfileId, onClose }: ProfileManagerModalProps) {
   const activeProfile = profiles.find(p => p.id === activeProfileId)
-  const isAdmin = activeProfile?.name === '세인'
+  const isAdmin = activeProfile?.name === ADMIN_NAME
   const { showToast } = useToast()
   const [newName, setNewName] = useState('')
   const [newPin, setNewPin] = useState('')
@@ -53,12 +54,16 @@ export default function ProfileManagerModal({ profiles, activeProfileId, onClose
   }, [])
 
   const handleSubscribe = async () => {
-    if (!('serviceWorker' in navigator)) return alert('이 브라우저는 알림을 지원하지 않습니다.')
+    if (!('serviceWorker' in navigator)) {
+      showToast('이 브라우저는 알림을 지원하지 않습니다.', 'error')
+      return
+    }
 
     // @ts-ignore
     const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
     if (!isStandalone && /iPhone|iPad|iPod/.test(navigator.userAgent)) {
-      return alert('아이폰은 "하단 공유 버튼 > 홈 화면에 추가"를 한 뒤 실행해야 알림을 받을 수 있습니다.')
+      showToast('아이폰은 "하단 공유 버튼 > 홈 화면에 추가"를 한 뒤 실행해야 알림을 받을 수 있습니다.', 'error')
+      return
     }
 
     setPushLoading(true)

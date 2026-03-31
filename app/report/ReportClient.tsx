@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { addReport, saveSubscription, addComment, deleteComment } from '../actions'
 import { useRouter } from 'next/navigation'
+import { ADMIN_NAME } from '../constants'
 import { useToast } from '../Toast'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale/ko'
@@ -119,7 +120,7 @@ export default function ReportClient({ activeProfileId, activeProfileName, myRep
       const result = await saveSubscription(activeProfileId || null, sub)
       if (result.success) {
         setIsSubscribed(true)
-        const msg = activeProfileName === '세인'
+        const msg = activeProfileName === ADMIN_NAME
           ? '새 리포트가 올라오면 알림을 드립니다! 🔔'
           : '세인님이 답글을 달면 알림을 드립니다! 🔔'
         showToast(msg, 'success')
@@ -195,7 +196,7 @@ export default function ReportClient({ activeProfileId, activeProfileName, myRep
     }
   }
 
-  const isAdminSein = activeProfileName === '세인'
+  const isAdminSein = activeProfileName === ADMIN_NAME
 
   return (
     <div className="manage-section">

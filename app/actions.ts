@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { revalidatePath } from 'next/cache'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
+import { ADMIN_NAME } from './constants'
 
 const TIMEZONE = 'Asia/Seoul'
 
@@ -56,7 +57,7 @@ export async function useParkingCard(id: number, date?: string) {
       user_name: card.user_name,
       used_at: usageDate.toISOString()
     })
-  if (historyError) return { success: false, error: `저장 실패: ${historyError.message}` }
+  if (historyError) return { success: false, error: '사용 기록 저장에 실패했습니다.' }
   revalidatePath('/')
   return { success: true }
 }
@@ -127,7 +128,7 @@ export async function addProfile(name: string, pinCode: string) {
 }
 
 export async function updateProfile(id: number, name: string, pinCode?: string) {
-  const updateData: any = { name }
+  const updateData: { name: string; pin_code?: string } = { name }
   if (pinCode) updateData.pin_code = pinCode
   const { error } = await supabase.from('profiles').update(updateData).eq('id', id)
   if (error) return { success: false, error: '수정 실패' }
@@ -325,7 +326,7 @@ async function sendPushToSein(payload: { title: string; body: string; url: strin
     const { data: subs, error } = await supabaseAdmin
       .from('parking_push_subscriptions')
       .select('subscription, profiles!inner(name)')
-      .eq('profiles.name', '세인');
+      .eq('profiles.name', ADMIN_NAME);
 
     if (error) return { success: false, error: error.message };
 
@@ -376,7 +377,7 @@ export async function addReport(profileId: number | null, type: string, content:
   if (error) return { success: false, error: '제출 실패' }
 
   await sendPushToSein({
-    title: type === 'bug' ? '🐞 새로운 버그 제보' : '💡 기능 제안',
+    title: type === 'bug' ? `🐞 새로운 버그 제보` : `💡 기능 제안`,
     body: content.length > 50 ? content.substring(0, 50) + '...' : content,
     url: '/admin/reports'
   });
@@ -390,7 +391,6 @@ export async function saveSubscription(profileId: number | null, subscription: a
   return { success: true }
 }
 
-export async function checkAutoReset(profileId: number) { return; }
 
 // ---------------------------------------------------------
 // 카드 월간 실적 관리
@@ -403,7 +403,7 @@ export async function getCardPerformance(cardIds: number[], yearMonth: string): 
     .select('card_id')
     .in('card_id', cardIds)
     .eq('year_month', yearMonth)
-  return (data || []).map((d: any) => d.card_id)
+  return (data || []).map((d: { card_id: number }) => d.card_id)
 }
 
 export async function toggleCardPerformance(cardId: number, yearMonth: string, achieved: boolean) {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { addParkingCard, deleteParkingCard, updateParkingCard, checkAutoReset } from '../actions'
+import { addParkingCard, deleteParkingCard, updateParkingCard } from '../actions'
 import { useToast } from '../Toast'
 
 interface Profile {
@@ -55,12 +55,6 @@ export default function ManageClient({ cards, profiles, activeProfileId }: Manag
       }
     }
   }, [cards, newColor, usedColors])
-
-  useEffect(() => {
-    if (activeProfileId) {
-      checkAutoReset(activeProfileId)
-    }
-  }, [activeProfileId])
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()

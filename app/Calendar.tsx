@@ -17,7 +17,7 @@ import {
 } from 'date-fns'
 import { ko } from 'date-fns/locale/ko'
 import { toZonedTime } from 'date-fns-tz'
-import { useParkingCard, deleteUsageHistory, checkAutoReset, getUsageHistory, getCardPerformance, toggleCardPerformance } from './actions'
+import { useParkingCard, deleteUsageHistory, getUsageHistory, getCardPerformance, toggleCardPerformance } from './actions'
 import { useToast } from './Toast'
 
 const TIMEZONE = 'Asia/Seoul'
@@ -163,19 +163,14 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
     }
   }, [currentMonth, refreshHistory])
 
-  useEffect(() => {
-    if (cards.length > 0 && cards[0].profile_id) {
-      checkAutoReset(cards[0].profile_id)
-    }
-  }, [cards])
-
   // Refresh performance data whenever viewed month changes
   useEffect(() => {
     const cardIds = cards.map(c => c.id)
     if (cardIds.length === 0) return
     const vm = format(currentMonth, 'yyyy-MM')
     const pm = format(subMonths(currentMonth, 1), 'yyyy-MM')
-    // If viewing current server month, use initial server-fetched data
+    setViewedMonthPerfIds([])
+    setPrevMonthPerfIds([])
     Promise.all([
       getCardPerformance(cardIds, vm),
       getCardPerformance(cardIds, pm),
@@ -223,15 +218,13 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
   const prevMonth = () => {
     setSlideDir('right')
     setAnimKey(k => k + 1)
-    setViewedMonthPerfIds([])
-    setPrevMonthPerfIds([])
+    setHistory([])
     setCurrentMonth(subMonths(currentMonth, 1))
   }
   const nextMonth = () => {
     setSlideDir('left')
     setAnimKey(k => k + 1)
-    setViewedMonthPerfIds([])
-    setPrevMonthPerfIds([])
+    setHistory([])
     setCurrentMonth(addMonths(currentMonth, 1))
   }
 
@@ -361,9 +354,9 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
 
       <div className="calendar-container" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         <div className="calendar-header">
-          <button onClick={prevMonth} className="nav-btn">&lt;</button>
+          <button onClick={prevMonth} className="nav-btn" aria-label="이전 달">&lt;</button>
           <h2>{format(currentMonth, 'yyyy년 MM월', { locale: ko })}</h2>
-          <button onClick={nextMonth} className="nav-btn">&gt;</button>
+          <button onClick={nextMonth} className="nav-btn" aria-label="다음 달">&gt;</button>
         </div>
 
         <div key={animKey} className={`calendar-grid${slideDir ? ` slide-${slideDir}` : ''}`}>

@@ -169,6 +169,9 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
                 <Link href="/" className={`menu-item ${pathname === '/' ? 'active' : ''}`} onClick={toggleMenu}>홈 (캘린더)</Link>
               </li>
               <li>
+                <Link href="/ev" className={`menu-item ${pathname === '/ev' ? 'active' : ''}`} onClick={toggleMenu}>⚡ EV 충전 대시보드</Link>
+              </li>
+              <li>
                 <Link href="/manage" className={`menu-item ${pathname === '/manage' ? 'active' : ''}`} onClick={toggleMenu}>카드 관리</Link>
               </li>
               <li>

@@ -169,8 +169,6 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
     if (cardIds.length === 0) return
     const vm = format(currentMonth, 'yyyy-MM')
     const pm = format(subMonths(currentMonth, 1), 'yyyy-MM')
-    setViewedMonthPerfIds([])
-    setPrevMonthPerfIds([])
     Promise.all([
       getCardPerformance(cardIds, vm),
       getCardPerformance(cardIds, pm),
@@ -219,12 +217,16 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
     setSlideDir('right')
     setAnimKey(k => k + 1)
     setHistory([])
+    setViewedMonthPerfIds([])
+    setPrevMonthPerfIds([])
     setCurrentMonth(subMonths(currentMonth, 1))
   }
   const nextMonth = () => {
     setSlideDir('left')
     setAnimKey(k => k + 1)
     setHistory([])
+    setViewedMonthPerfIds([])
+    setPrevMonthPerfIds([])
     setCurrentMonth(addMonths(currentMonth, 1))
   }
 

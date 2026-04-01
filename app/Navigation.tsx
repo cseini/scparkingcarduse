@@ -7,7 +7,6 @@ import Cookies from 'js-cookie'
 import ProfileManagerModal from './ProfileManagerModal'
 import ThemeToggle from './ThemeToggle'
 import { checkProfilePin, setProfileCookieAction } from './actions'
-import { ADMIN_NAME } from './constants'
 
 interface Profile {
   id: number
@@ -191,15 +190,12 @@ export default function Navigation({ profiles, initialProfileId }: NavigationPro
                 <Link href="/" className={`menu-item ${pathname === '/' ? 'active' : ''}`} onClick={toggleMenu}>홈 (캘린더)</Link>
               </li>
               <li>
-                <Link href="/ev" className={`menu-item ${pathname === '/ev' ? 'active' : ''}`} onClick={toggleMenu}>⚡ EV 충전 대시보드</Link>
-              </li>
-              <li>
                 <Link href="/manage" className={`menu-item ${pathname === '/manage' ? 'active' : ''}`} onClick={toggleMenu}>카드 관리</Link>
               </li>
               <li>
                 <Link href="/report" className={`menu-item ${pathname === '/report' ? 'active' : ''}`} onClick={toggleMenu}>버그 리포트</Link>
               </li>
-              {activeName === ADMIN_NAME && (
+              {activeName === '세인' && (
                 <li>
                   <Link href="/admin/reports" className={`menu-item ${pathname === '/admin/reports' ? 'active' : ''}`} onClick={toggleMenu}>🐞 제보 목록 (Admin)</Link>
                 </li>

@@ -9,7 +9,7 @@ import {
   isSameDay,
   startOfWeek,
   endOfWeek,
-  isToday,
+
   addMonths,
   subMonths,
   isSaturday,
@@ -374,7 +374,7 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
 
             let dayClass = 'calendar-day'
             if (!isCurrentMonth) dayClass += ' other-month'
-            if (isToday(day)) dayClass += ' today'
+            if (isSameDay(day, toZonedTime(new Date(), TIMEZONE))) dayClass += ' today'
             if (isSaturday(day)) dayClass += ' saturday'
             if (isSunday(day) || isHoliday(day)) dayClass += ' sunday'
             if (holidayName) dayClass += ' holiday'

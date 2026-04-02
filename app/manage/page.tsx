@@ -3,6 +3,7 @@ import ManageClient from './ManageClient'
 import { getProfiles } from '../actions'
 import { cookies } from 'next/headers'
 import { startOfMonth, endOfMonth } from 'date-fns'
+import { toZonedTime } from 'date-fns-tz'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
@@ -22,7 +23,7 @@ async function getParkingCards(profileId?: number) {
   }
 
   // 이번 달 사용 횟수를 이력 테이블에서 실시간으로 계산
-  const now = new Date()
+  const now = toZonedTime(new Date(), 'Asia/Seoul')
   const start = startOfMonth(now).toISOString()
   const end = endOfMonth(now).toISOString()
 

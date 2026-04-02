@@ -3,6 +3,7 @@ import Calendar from './Calendar'
 import { getUsageHistory, getProfiles, getCardPerformance } from './actions'
 import { cookies } from 'next/headers'
 import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns'
+import { toZonedTime } from 'date-fns-tz'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
@@ -22,7 +23,7 @@ async function getParkingCards(profileId?: number) {
   }
 
   // 이번 달 사용 횟수를 이력 테이블에서 실시간으로 계산
-  const now = new Date()
+  const now = toZonedTime(new Date(), 'Asia/Seoul')
   const start = startOfMonth(now).toISOString()
   const end = endOfMonth(now).toISOString()
 
@@ -48,7 +49,7 @@ export default async function Home() {
   const profileCookie = cookieStore.get('selected_profile_id')?.value
   const profileId = profileCookie ? parseInt(profileCookie, 10) : undefined
 
-  const now = new Date()
+  const now = toZonedTime(new Date(), 'Asia/Seoul')
   const cards = await getParkingCards(profileId)
   const history = await getUsageHistory(now.getFullYear(), now.getMonth() + 1, profileId)
 

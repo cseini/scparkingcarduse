@@ -9,7 +9,7 @@ import {
   isSameDay,
   startOfWeek,
   endOfWeek,
-  isToday,
+
   addMonths,
   subMonths,
   isSaturday,
@@ -148,7 +148,7 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
   }, [currentMonth, cards])
 
   useEffect(() => {
-    const now = new Date()
+    const now = toZonedTime(new Date(), TIMEZONE)
     const isViewingCurrentMonth = currentMonth.getFullYear() === now.getFullYear() && currentMonth.getMonth() === now.getMonth()
     if (isViewingCurrentMonth) {
       setHistory(initialHistory)
@@ -156,7 +156,7 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
   }, [initialHistory, currentMonth])
 
   useEffect(() => {
-    const now = new Date()
+    const now = toZonedTime(new Date(), TIMEZONE)
     const isCurrentRealMonth = currentMonth.getFullYear() === now.getFullYear() && currentMonth.getMonth() === now.getMonth()
     if (!isCurrentRealMonth) {
       refreshHistory()
@@ -374,7 +374,7 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
 
             let dayClass = 'calendar-day'
             if (!isCurrentMonth) dayClass += ' other-month'
-            if (isToday(day)) dayClass += ' today'
+            if (isSameDay(day, toZonedTime(new Date(), TIMEZONE))) dayClass += ' today'
             if (isSaturday(day)) dayClass += ' saturday'
             if (isSunday(day) || isHoliday(day)) dayClass += ' sunday'
             if (holidayName) dayClass += ' holiday'

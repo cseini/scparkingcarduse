@@ -49,7 +49,7 @@ export default async function Home() {
   const profileCookie = cookieStore.get('selected_profile_id')?.value
   const profileId = profileCookie ? parseInt(profileCookie, 10) : undefined
 
-  const now = new Date()
+  const now = toZonedTime(new Date(), 'Asia/Seoul')
   const cards = await getParkingCards(profileId)
   const history = await getUsageHistory(now.getFullYear(), now.getMonth() + 1, profileId)
 

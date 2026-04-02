@@ -148,7 +148,7 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
   }, [currentMonth, cards])
 
   useEffect(() => {
-    const now = new Date()
+    const now = toZonedTime(new Date(), TIMEZONE)
     const isViewingCurrentMonth = currentMonth.getFullYear() === now.getFullYear() && currentMonth.getMonth() === now.getMonth()
     if (isViewingCurrentMonth) {
       setHistory(initialHistory)
@@ -156,7 +156,7 @@ export default function Calendar({ cards, history: initialHistory, initialThisMo
   }, [initialHistory, currentMonth])
 
   useEffect(() => {
-    const now = new Date()
+    const now = toZonedTime(new Date(), TIMEZONE)
     const isCurrentRealMonth = currentMonth.getFullYear() === now.getFullYear() && currentMonth.getMonth() === now.getMonth()
     if (!isCurrentRealMonth) {
       refreshHistory()

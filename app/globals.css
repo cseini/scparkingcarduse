@@ -266,7 +266,8 @@ body {
 }
 
 .calendar-day.other-month { background: var(--item-bg); cursor: default; pointer-events: none; opacity: 0.3; }
-.calendar-day.today { background: rgba(37, 99, 235, 0.1); border: 1px solid var(--primary); }
+.calendar-day.today { background: rgba(37, 99, 235, 0.25); border: 2px solid var(--primary); box-shadow: 0 0 8px rgba(37, 99, 235, 0.4); }
+.calendar-day.today .day-number { color: #60a5fa; font-weight: 800; }
 .calendar-day.sunday .day-number,
 .calendar-day.holiday .day-number { color: #ef4444; }
 .calendar-day.saturday .day-number { color: #3b82f6; }

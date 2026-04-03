@@ -22,7 +22,7 @@ export default function PullToRefresh({ children }: { children: React.ReactNode 
       if (startY.current === null) return
       const dy = e.touches[0].clientY - startY.current
       if (dy <= 0) { startY.current = null; return }
-      e.preventDefault()
+      e.preventDefault()  // 반드시 preventDefault 먼저 (브라우저 네이티브 pull-to-refresh 차단)
       setPullY(Math.min(dy * 0.4, THRESHOLD + 20))
     }
 

@@ -45,8 +45,10 @@ export default async function RootLayout({
       </head>
       <body>
         <ToastProvider>
-          <Navigation profiles={profiles} initialProfileId={selectedProfileId} />
-          {children}
+          <div id="scroll-root">
+            <Navigation profiles={profiles} initialProfileId={selectedProfileId} />
+            {children}
+          </div>
         </ToastProvider>
       </body>
     </html>

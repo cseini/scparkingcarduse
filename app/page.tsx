@@ -4,6 +4,7 @@ import { getUsageHistory, getProfiles, getCardPerformance } from './actions'
 import { cookies } from 'next/headers'
 import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns'
 import { toZonedTime } from 'date-fns-tz'
+import PullToRefresh from './PullToRefresh'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
@@ -66,6 +67,7 @@ export default async function Home() {
   const isCardsEmpty = cards.length === 0
 
   return (
+    <PullToRefresh>
     <main className="container">
       {isProfileNotSelected ? (
         <div style={{ textAlign: 'center', padding: '3rem 2rem', background: 'var(--card-bg)', borderRadius: '1.25rem', color: 'var(--text-muted)', border: '1.5px dashed var(--border)', marginTop: '1.5rem' }}>
@@ -118,5 +120,6 @@ export default async function Home() {
         />
       )}
     </main>
+    </PullToRefresh>
   )
 }

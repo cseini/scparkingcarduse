@@ -11,11 +11,12 @@ export default function PullToRefresh({ children }: { children: React.ReactNode 
   const THRESHOLD = 72
 
   useEffect(() => {
-    const el = document.getElementById('scroll-root')
+    const el = document.getElementById('scroll-root') as HTMLElement | null
     if (!el) return
+    const scrollEl: HTMLElement = el
 
     function onTouchStart(e: TouchEvent) {
-      if (el.scrollTop > 0) return
+      if (scrollEl.scrollTop > 0) return
       startY.current = e.touches[0].clientY
     }
 
@@ -40,13 +41,13 @@ export default function PullToRefresh({ children }: { children: React.ReactNode 
       })
     }
 
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-    el.addEventListener('touchend', onTouchEnd)
+    scrollEl.addEventListener('touchstart', onTouchStart, { passive: true })
+    scrollEl.addEventListener('touchmove', onTouchMove, { passive: false })
+    scrollEl.addEventListener('touchend', onTouchEnd)
     return () => {
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-      el.removeEventListener('touchend', onTouchEnd)
+      scrollEl.removeEventListener('touchstart', onTouchStart)
+      scrollEl.removeEventListener('touchmove', onTouchMove)
+      scrollEl.removeEventListener('touchend', onTouchEnd)
     }
   }, [router])
 
